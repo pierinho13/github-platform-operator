@@ -18,6 +18,7 @@ package main
 
 import (
 	"crypto/tls"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -39,6 +40,7 @@ import (
 
 	githubv1alpha1 "github.com/pierinho13/github-platform-operator/api/v1alpha1"
 	"github.com/pierinho13/github-platform-operator/internal/controller"
+	githubclient "github.com/pierinho13/github-platform-operator/internal/github"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -88,6 +90,23 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	githubToken := os.Getenv("GITHUB_TOKEN")
+	if githubToken == "" {
+		setupLog.Error(errors.New("GITHUB_TOKEN is required"), "unable to configure GitHub client")
+		os.Exit(1)
+	}
+
+	githubAPIURL := os.Getenv("GITHUB_API_URL")
+	if githubAPIURL == "" {
+		githubAPIURL = "https://api.github.com"
+	}
+
+	githubClient, err := githubclient.NewRESTClient(githubToken, githubAPIURL)
+	if err != nil {
+		setupLog.Error(err, "unable to configure GitHub client")
+		os.Exit(1)
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -203,8 +222,9 @@ func main() {
 	}
 
 	if err := (&controller.GitHubRepositoryReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:       mgr.GetClient(),
+		Scheme:       mgr.GetScheme(),
+		GitHubClient: githubClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepository")
 		os.Exit(1)

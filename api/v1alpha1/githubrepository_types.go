@@ -36,10 +36,12 @@ const (
 type GitHubRepositorySpec struct {
 	// Organization is the GitHub organization where the repository will be created.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="organization is immutable"
 	Organization string `json:"organization"`
 
 	// Name is the name of the GitHub repository.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="name is immutable"
 	Name string `json:"name"`
 
 	// Visibility determines whether the repository is public or private.
@@ -49,6 +51,27 @@ type GitHubRepositorySpec struct {
 
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
 type GitHubRepositoryStatus struct {
+	// RepositoryID is the numeric identifier assigned by GitHub.
+	// +optional
+	RepositoryID int64 `json:"repositoryId,omitempty"`
+
+	// URL is the HTML URL of the GitHub repository.
+	// +optional
+	URL string `json:"url,omitempty"`
+
+	// Visibility is the repository visibility last observed in GitHub.
+	// +optional
+	Visibility RepositoryVisibility `json:"visibility,omitempty"`
+
+	// ObservedGeneration is the GitHubRepository generation most recently reconciled.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions describe the current reconciliation state.
+	// +optional
+	// +listType=map
+	// +listMapKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -56,7 +79,8 @@ type GitHubRepositoryStatus struct {
 // +kubebuilder:resource:shortName=ghrepo
 // +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.spec.organization`
 // +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.name`
-// +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.spec.visibility`
+// +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.status.visibility`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // GitHubRepository is the Schema for the githubrepositories API.
