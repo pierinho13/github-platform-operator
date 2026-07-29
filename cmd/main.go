@@ -18,7 +18,6 @@ package main
 
 import (
 	"crypto/tls"
-	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -90,23 +89,6 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	githubToken := os.Getenv("GITHUB_TOKEN")
-	if githubToken == "" {
-		setupLog.Error(errors.New("GITHUB_TOKEN is required"), "unable to configure GitHub client")
-		os.Exit(1)
-	}
-
-	githubAPIURL := os.Getenv("GITHUB_API_URL")
-	if githubAPIURL == "" {
-		githubAPIURL = "https://api.github.com"
-	}
-
-	githubClient, err := githubclient.NewRESTClient(githubToken, githubAPIURL)
-	if err != nil {
-		setupLog.Error(err, "unable to configure GitHub client")
-		os.Exit(1)
-	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -221,10 +203,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := (&controller.GitHubProviderConfigReconciler{
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Scheme:    mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubProviderConfig")
+		os.Exit(1)
+	}
+
 	if err := (&controller.GitHubRepositoryReconciler{
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		GitHubClient: githubClient,
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepository")
 		os.Exit(1)

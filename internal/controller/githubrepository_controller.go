@@ -20,12 +20,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -43,13 +46,16 @@ const (
 // GitHubRepositoryReconciler reconciles a GitHubRepository object.
 type GitHubRepositoryReconciler struct {
 	client.Client
-	Scheme       *runtime.Scheme
-	GitHubClient githubclient.RepositoryClient
+	APIReader           client.Reader
+	Scheme              *runtime.Scheme
+	GitHubClientFactory githubclient.RepositoryClientFactory
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories/finalizers,verbs=update
+// +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 
 // Reconcile moves the GitHub repository closer to the state declared in Kubernetes.
 func (r *GitHubRepositoryReconciler) Reconcile(
@@ -61,17 +67,6 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 	var repository githubv1alpha1.GitHubRepository
 	if err := r.Get(ctx, req.NamespacedName, &repository); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-
-	logger.Info(
-		"reconciling GitHubRepository",
-		"organization", repository.Spec.Organization,
-		"repository", repository.Spec.Name,
-		"visibility", repository.Spec.Visibility,
-	)
-
-	if r.GitHubClient == nil {
-		return ctrl.Result{}, errors.New("GitHub client is not configured")
 	}
 
 	if !repository.DeletionTimestamp.IsZero() {
@@ -87,11 +82,43 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
-	remoteRepository, action, err := r.reconcileRemoteRepository(ctx, &repository)
+	provider, repositoryClient, err := r.resolveProvider(ctx, &repository)
 	if err != nil {
 		statusErr := r.setReadyCondition(
 			ctx,
 			&repository,
+			nil,
+			nil,
+			metav1.ConditionFalse,
+			"ProviderUnavailable",
+			err.Error(),
+		)
+		if statusErr != nil {
+			return ctrl.Result{}, fmt.Errorf("%w; update failure status: %v", err, statusErr)
+		}
+
+		return ctrl.Result{}, err
+	}
+
+	logger.Info(
+		"reconciling GitHubRepository",
+		"providerConfig", provider.Name,
+		"organization", provider.Spec.Organization,
+		"repository", repository.Spec.Name,
+		"visibility", repository.Spec.Visibility,
+	)
+
+	remoteRepository, action, err := r.reconcileRemoteRepository(
+		ctx,
+		&repository,
+		provider.Spec.Organization,
+		repositoryClient,
+	)
+	if err != nil {
+		statusErr := r.setReadyCondition(
+			ctx,
+			&repository,
+			provider,
 			nil,
 			metav1.ConditionFalse,
 			"ReconciliationFailed",
@@ -107,12 +134,13 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 	if err := r.setReadyCondition(
 		ctx,
 		&repository,
+		provider,
 		remoteRepository,
 		metav1.ConditionTrue,
 		action,
 		fmt.Sprintf(
 			"GitHub repository %s/%s is available with %s visibility",
-			repository.Spec.Organization,
+			provider.Spec.Organization,
 			repository.Spec.Name,
 			remoteRepository.Visibility,
 		),
@@ -123,21 +151,89 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
+func (r *GitHubRepositoryReconciler) resolveProvider(
+	ctx context.Context,
+	repository *githubv1alpha1.GitHubRepository,
+) (*githubv1alpha1.GitHubProviderConfig, githubclient.RepositoryClient, error) {
+	if r.GitHubClientFactory == nil {
+		return nil, nil, errors.New("GitHub client factory is not configured")
+	}
+
+	providerName := repository.Spec.EffectiveProviderConfigRef()
+	var provider githubv1alpha1.GitHubProviderConfig
+	if err := r.Get(ctx, types.NamespacedName{Name: providerName}, &provider); err != nil {
+		return nil, nil, fmt.Errorf("get GitHubProviderConfig %q: %w", providerName, err)
+	}
+
+	reader := r.APIReader
+	if reader == nil {
+		reader = r.Client
+	}
+
+	secretRef := provider.Spec.Credentials.SecretRef
+	var secret corev1.Secret
+	if err := reader.Get(ctx, types.NamespacedName{
+		Namespace: secretRef.Namespace,
+		Name:      secretRef.Name,
+	}, &secret); err != nil {
+		return nil, nil, fmt.Errorf(
+			"get credentials Secret %s/%s: %w",
+			secretRef.Namespace,
+			secretRef.Name,
+			err,
+		)
+	}
+
+	tokenValue, ok := secret.Data[secretRef.Key]
+	if !ok {
+		return nil, nil, fmt.Errorf(
+			"credentials Secret %s/%s does not contain key %q",
+			secretRef.Namespace,
+			secretRef.Name,
+			secretRef.Key,
+		)
+	}
+
+	token := strings.TrimSpace(string(tokenValue))
+	if token == "" {
+		return nil, nil, fmt.Errorf(
+			"credentials Secret %s/%s contains an empty key %q",
+			secretRef.Namespace,
+			secretRef.Name,
+			secretRef.Key,
+		)
+	}
+
+	apiURL := provider.Spec.APIURL
+	if apiURL == "" {
+		apiURL = githubv1alpha1.DefaultGitHubAPIURL
+	}
+
+	repositoryClient, err := r.GitHubClientFactory.NewRepositoryClient(token, apiURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create GitHub client for provider %q: %w", provider.Name, err)
+	}
+
+	return &provider, repositoryClient, nil
+}
+
 func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 	ctx context.Context,
 	repository *githubv1alpha1.GitHubRepository,
+	organization string,
+	repositoryClient githubclient.RepositoryClient,
 ) (*githubclient.Repository, string, error) {
 	logger := logf.FromContext(ctx)
 
-	remoteRepository, err := r.GitHubClient.GetRepository(
+	remoteRepository, err := repositoryClient.GetRepository(
 		ctx,
-		repository.Spec.Organization,
+		organization,
 		repository.Spec.Name,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
 		return nil, "", fmt.Errorf(
 			"get GitHub repository %s/%s: %w",
-			repository.Spec.Organization,
+			organization,
 			repository.Spec.Name,
 			err,
 		)
@@ -146,16 +242,16 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 	if errors.Is(err, githubclient.ErrNotFound) {
 		logger.Info("GitHub repository does not exist, creating it")
 
-		remoteRepository, err = r.GitHubClient.CreateRepository(
+		remoteRepository, err = repositoryClient.CreateRepository(
 			ctx,
-			repository.Spec.Organization,
+			organization,
 			repository.Spec.Name,
 			repository.Spec.Visibility == githubv1alpha1.RepositoryVisibilityPrivate,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf(
 				"create GitHub repository %s/%s: %w",
-				repository.Spec.Organization,
+				organization,
 				repository.Spec.Name,
 				err,
 			)
@@ -178,16 +274,16 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 			"desiredVisibility", desiredVisibility,
 		)
 
-		remoteRepository, err = r.GitHubClient.UpdateRepositoryVisibility(
+		remoteRepository, err = repositoryClient.UpdateRepositoryVisibility(
 			ctx,
-			repository.Spec.Organization,
+			organization,
 			repository.Spec.Name,
 			desiredVisibility,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf(
 				"update GitHub repository %s/%s visibility: %w",
-				repository.Spec.Organization,
+				organization,
 				repository.Spec.Name,
 				err,
 			)
@@ -220,17 +316,26 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("deleting GitHub repository before removing finalizer")
+	provider, repositoryClient, err := r.resolveProvider(ctx, repository)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("resolve provider for deletion: %w", err)
+	}
 
-	err := r.GitHubClient.DeleteRepository(
+	logger.Info(
+		"deleting GitHub repository before removing finalizer",
+		"providerConfig", provider.Name,
+		"organization", provider.Spec.Organization,
+	)
+
+	err = repositoryClient.DeleteRepository(
 		ctx,
-		repository.Spec.Organization,
+		provider.Spec.Organization,
 		repository.Spec.Name,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
 		return ctrl.Result{}, fmt.Errorf(
 			"delete GitHub repository %s/%s: %w",
-			repository.Spec.Organization,
+			provider.Spec.Organization,
 			repository.Spec.Name,
 			err,
 		)
@@ -253,13 +358,17 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 func (r *GitHubRepositoryReconciler) setReadyCondition(
 	ctx context.Context,
 	repository *githubv1alpha1.GitHubRepository,
+	provider *githubv1alpha1.GitHubProviderConfig,
 	remoteRepository *githubclient.Repository,
 	conditionStatus metav1.ConditionStatus,
 	reason string,
 	message string,
 ) error {
 	previousStatus := repository.Status.DeepCopy()
-
+	repository.Status.ProviderConfigRef = repository.Spec.EffectiveProviderConfigRef()
+	if provider != nil {
+		repository.Status.Organization = provider.Spec.Organization
+	}
 	if remoteRepository != nil {
 		repository.Status.RepositoryID = remoteRepository.ID
 		repository.Status.URL = remoteRepository.HTMLURL

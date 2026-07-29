@@ -31,6 +31,19 @@ type Repository struct {
 	Visibility string
 }
 
+// RepositoryClientFactory creates clients from provider credentials.
+type RepositoryClientFactory interface {
+	NewRepositoryClient(token, baseURL string) (RepositoryClient, error)
+}
+
+// RESTClientFactory creates REST-backed GitHub repository clients.
+type RESTClientFactory struct{}
+
+// NewRepositoryClient creates a REST-backed repository client.
+func (RESTClientFactory) NewRepositoryClient(token, baseURL string) (RepositoryClient, error) {
+	return NewRESTClient(token, baseURL)
+}
+
 // RepositoryClient defines the GitHub repository operations used by the controller.
 type RepositoryClient interface {
 	GetRepository(ctx context.Context, organization, name string) (*Repository, error)

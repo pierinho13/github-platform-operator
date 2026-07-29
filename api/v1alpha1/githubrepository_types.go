@@ -20,6 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const DefaultGitHubProviderConfigName = "default"
+
 // RepositoryVisibility defines the visibility supported by GitHub repositories.
 // +kubebuilder:validation:Enum=public;private
 type RepositoryVisibility string
@@ -34,10 +36,17 @@ const (
 
 // GitHubRepositorySpec defines the desired state of GitHubRepository.
 type GitHubRepositorySpec struct {
-	// Organization is the GitHub organization where the repository will be created.
+	// ProviderConfigRef references the cluster-scoped GitHubProviderConfig.
+	// +kubebuilder:default=default
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="providerConfigRef is immutable"
+	ProviderConfigRef string `json:"providerConfigRef,omitempty"`
+
+	// Organization is deprecated and ignored. Configure the organization through
+	// GitHubProviderConfig instead. It is temporarily retained for v1alpha1 migration.
+	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="organization is immutable"
-	Organization string `json:"organization"`
+	Organization string `json:"organization,omitempty"`
 
 	// Name is the name of the GitHub repository.
 	// +kubebuilder:validation:MinLength=1
@@ -49,8 +58,25 @@ type GitHubRepositorySpec struct {
 	Visibility RepositoryVisibility `json:"visibility,omitempty"`
 }
 
+// EffectiveProviderConfigRef returns the configured provider or the default provider name.
+func (s GitHubRepositorySpec) EffectiveProviderConfigRef() string {
+	if s.ProviderConfigRef == "" {
+		return DefaultGitHubProviderConfigName
+	}
+
+	return s.ProviderConfigRef
+}
+
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
 type GitHubRepositoryStatus struct {
+	// ProviderConfigRef is the provider configuration used during reconciliation.
+	// +optional
+	ProviderConfigRef string `json:"providerConfigRef,omitempty"`
+
+	// Organization is the GitHub organization last observed from the provider configuration.
+	// +optional
+	Organization string `json:"organization,omitempty"`
+
 	// RepositoryID is the numeric identifier assigned by GitHub.
 	// +optional
 	RepositoryID int64 `json:"repositoryId,omitempty"`
@@ -77,7 +103,8 @@ type GitHubRepositoryStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=ghrepo
-// +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.spec.organization`
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.providerConfigRef`
+// +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.status.organization`
 // +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.status.visibility`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`

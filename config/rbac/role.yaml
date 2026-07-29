@@ -5,8 +5,15 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
   - github.k8sready.com
   resources:
+  - githubproviderconfigs
   - githubrepositories
   verbs:
   - create
@@ -19,12 +26,14 @@ rules:
 - apiGroups:
   - github.k8sready.com
   resources:
+  - githubproviderconfigs/finalizers
   - githubrepositories/finalizers
   verbs:
   - update
 - apiGroups:
   - github.k8sready.com
   resources:
+  - githubproviderconfigs/status
   - githubrepositories/status
   verbs:
   - get

@@ -4,6 +4,6 @@ metadata:
   name: test-repository
   namespace: default
 spec:
-  organization: k8sready
+  providerConfigRef: default
   name: test-repository
   visibility: private

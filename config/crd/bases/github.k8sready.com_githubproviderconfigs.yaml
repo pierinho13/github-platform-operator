@@ -4,30 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: githubrepositories.github.k8sready.com
+  name: githubproviderconfigs.github.k8sready.com
 spec:
   group: github.k8sready.com
   names:
-    kind: GitHubRepository
-    listKind: GitHubRepositoryList
-    plural: githubrepositories
+    kind: GitHubProviderConfig
+    listKind: GitHubProviderConfigList
+    plural: githubproviderconfigs
     shortNames:
-    - ghrepo
-    singular: githubrepository
-  scope: Namespaced
+    - ghprovider
+    singular: githubproviderconfig
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.providerConfigRef
-      name: Provider
-      type: string
-    - jsonPath: .status.organization
+    - jsonPath: .spec.organization
       name: Organization
       type: string
-    - jsonPath: .spec.name
-      name: Repository
-      type: string
-    - jsonPath: .status.visibility
-      name: Visibility
+    - jsonPath: .spec.apiURL
+      name: API URL
       type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
@@ -38,7 +32,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: GitHubRepository is the Schema for the githubrepositories API.
+        description: GitHubProviderConfig is the Schema for reusable GitHub connections.
         properties:
           apiVersion:
             description: |-
@@ -58,47 +52,63 @@ spec:
           metadata:
             type: object
           spec:
-            description: GitHubRepositorySpec defines the desired state of GitHubRepository.
+            description: GitHubProviderConfigSpec defines a reusable GitHub organization
+              connection.
             properties:
-              name:
-                description: Name is the name of the GitHub repository.
-                minLength: 1
+              apiURL:
+                default: https://api.github.com
+                description: APIURL is the GitHub API base URL.
+                pattern: ^https?://.+
                 type: string
                 x-kubernetes-validations:
-                - message: name is immutable
+                - message: apiURL is immutable
                   rule: self == oldSelf
+              credentials:
+                description: Credentials defines where the GitHub token is stored.
+                properties:
+                  secretRef:
+                    description: SecretRef references the Secret containing the GitHub
+                      token.
+                    properties:
+                      key:
+                        description: Key is the key containing the GitHub token.
+                        minLength: 1
+                        type: string
+                      name:
+                        description: Name is the name of the Secret.
+                        minLength: 1
+                        type: string
+                      namespace:
+                        description: Namespace is the namespace containing the Secret.
+                        minLength: 1
+                        type: string
+                    required:
+                    - key
+                    - name
+                    - namespace
+                    type: object
+                required:
+                - secretRef
+                type: object
               organization:
-                description: |-
-                  Organization is deprecated and ignored. Configure the organization through
-                  GitHubProviderConfig instead. It is temporarily retained for v1alpha1 migration.
+                description: Organization is the GitHub organization managed through
+                  this provider.
+                minLength: 1
                 type: string
                 x-kubernetes-validations:
                 - message: organization is immutable
                   rule: self == oldSelf
-              providerConfigRef:
-                default: default
-                description: ProviderConfigRef references the cluster-scoped GitHubProviderConfig.
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: providerConfigRef is immutable
-                  rule: self == oldSelf
-              visibility:
-                default: private
-                description: Visibility determines whether the repository is public
-                  or private.
-                enum:
-                - public
-                - private
-                type: string
             required:
-            - name
+            - credentials
+            - organization
             type: object
           status:
-            description: GitHubRepositoryStatus defines the observed state of GitHubRepository.
+            description: GitHubProviderConfigStatus defines the observed provider
+              configuration state.
             properties:
               conditions:
-                description: Conditions describe the current reconciliation state.
+                description: Conditions describe whether the referenced credentials
+                  are available.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -158,32 +168,9 @@ spec:
                 - type
                 x-kubernetes-list-type: map
               observedGeneration:
-                description: ObservedGeneration is the GitHubRepository generation
-                  most recently reconciled.
+                description: ObservedGeneration is the generation most recently validated.
                 format: int64
                 type: integer
-              organization:
-                description: Organization is the GitHub organization last observed
-                  from the provider configuration.
-                type: string
-              providerConfigRef:
-                description: ProviderConfigRef is the provider configuration used
-                  during reconciliation.
-                type: string
-              repositoryId:
-                description: RepositoryID is the numeric identifier assigned by GitHub.
-                format: int64
-                type: integer
-              url:
-                description: URL is the HTML URL of the GitHub repository.
-                type: string
-              visibility:
-                description: Visibility is the repository visibility last observed
-                  in GitHub.
-                enum:
-                - public
-                - private
-                type: string
             type: object
         type: object
     served: true
