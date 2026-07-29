@@ -1,0 +1,9 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepository
+metadata:
+  name: test-repository
+  namespace: default
+spec:
+  organization: k8sready
+  name: test-repository
+  visibility: private
