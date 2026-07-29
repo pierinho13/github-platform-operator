@@ -1,1 +1,1 @@
-# ithub-platform-operator
+# github-platform-operator
