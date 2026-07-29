@@ -91,7 +91,7 @@ func (c *RESTClient) GetRepository(
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(response.Body)
 
 	if response.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -131,7 +131,7 @@ func (c *RESTClient) CreateRepository(
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(response.Body)
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return nil, decodeAPIError(response)
@@ -165,7 +165,7 @@ func (c *RESTClient) UpdateRepositoryVisibility(
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(response.Body)
 
 	if response.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
@@ -192,7 +192,7 @@ func (c *RESTClient) DeleteRepository(
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	defer closeResponseBody(response.Body)
 
 	if response.StatusCode == http.StatusNotFound {
 		return ErrNotFound
@@ -238,6 +238,10 @@ func (c *RESTClient) do(
 	}
 
 	return response, nil
+}
+
+func closeResponseBody(body io.ReadCloser) {
+	_ = body.Close()
 }
 
 func decodeRepository(body io.Reader) (*Repository, error) {
