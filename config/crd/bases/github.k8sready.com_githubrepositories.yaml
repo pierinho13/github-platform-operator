@@ -1,0 +1,85 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: githubrepositories.github.k8sready.com
+spec:
+  group: github.k8sready.com
+  names:
+    kind: GitHubRepository
+    listKind: GitHubRepositoryList
+    plural: githubrepositories
+    shortNames:
+    - ghrepo
+    singular: githubrepository
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.organization
+      name: Organization
+      type: string
+    - jsonPath: .spec.name
+      name: Repository
+      type: string
+    - jsonPath: .spec.visibility
+      name: Visibility
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: GitHubRepository is the Schema for the githubrepositories API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: GitHubRepositorySpec defines the desired state of GitHubRepository.
+            properties:
+              name:
+                description: Name is the name of the GitHub repository.
+                minLength: 1
+                type: string
+              organization:
+                description: Organization is the GitHub organization where the repository
+                  will be created.
+                minLength: 1
+                type: string
+              visibility:
+                default: private
+                description: Visibility determines whether the repository is public
+                  or private.
+                enum:
+                - public
+                - private
+                type: string
+            required:
+            - name
+            - organization
+            type: object
+          status:
+            description: GitHubRepositoryStatus defines the observed state of GitHubRepository.
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

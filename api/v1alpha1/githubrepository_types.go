@@ -20,26 +20,44 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+// RepositoryVisibility defines the visibility supported by GitHub repositories.
+// +kubebuilder:validation:Enum=public;private
+type RepositoryVisibility string
+
+const (
+	// RepositoryVisibilityPublic makes the repository publicly accessible.
+	RepositoryVisibilityPublic RepositoryVisibility = "public"
+
+	// RepositoryVisibilityPrivate restricts access to authorized users.
+	RepositoryVisibilityPrivate RepositoryVisibility = "private"
+)
 
 // GitHubRepositorySpec defines the desired state of GitHubRepository.
 type GitHubRepositorySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Organization is the GitHub organization where the repository will be created.
+	// +kubebuilder:validation:MinLength=1
+	Organization string `json:"organization"`
 
-	// Foo is an example field of GitHubRepository. Edit githubrepository_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Name is the name of the GitHub repository.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Visibility determines whether the repository is public or private.
+	// +kubebuilder:default=private
+	Visibility RepositoryVisibility `json:"visibility,omitempty"`
 }
 
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
 type GitHubRepositoryStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=ghrepo
+// +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.spec.organization`
+// +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.name`
+// +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.spec.visibility`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // GitHubRepository is the Schema for the githubrepositories API.
 type GitHubRepository struct {
