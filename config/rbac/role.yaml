@@ -10,9 +10,14 @@ rules:
   - secrets
   verbs:
   - get
+  - list
+  - watch
 - apiGroups:
   - github.k8sready.com
   resources:
+  - githubactionssecrets
+  - githubactionsvariables
+  - githubenvironments
   - githubproviderconfigs
   - githubrepositories
   - githubrepositorycollaborators
@@ -28,6 +33,9 @@ rules:
 - apiGroups:
   - github.k8sready.com
   resources:
+  - githubactionssecrets/finalizers
+  - githubactionsvariables/finalizers
+  - githubenvironments/finalizers
   - githubproviderconfigs/finalizers
   - githubrepositories/finalizers
   - githubrepositorycollaborators/finalizers
@@ -37,6 +45,9 @@ rules:
 - apiGroups:
   - github.k8sready.com
   resources:
+  - githubactionssecrets/status
+  - githubactionsvariables/status
+  - githubenvironments/status
   - githubproviderconfigs/status
   - githubrepositories/status
   - githubrepositorycollaborators/status

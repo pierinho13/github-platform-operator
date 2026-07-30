@@ -1,0 +1,16 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubActionsVariable
+metadata:
+  name: organization-cloud-region
+  namespace: default
+spec:
+  target:
+    organization:
+      providerConfigRef: default
+      visibility: private
+  name: CLOUD_REGION
+  valueFrom:
+    secretKeyRef:
+      name: organization-actions-values
+      key: cloud-region
+  deletionPolicy: Orphan

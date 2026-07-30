@@ -51,7 +51,7 @@ type GitHubProviderConfigReconciler struct {
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories,verbs=get;list;watch
+// +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories;githubactionssecrets;githubactionsvariables,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 
 // Reconcile validates the referenced Secret and prevents deleting providers that are still in use.
@@ -183,12 +183,62 @@ func (r *GitHubProviderConfigReconciler) reconcileDelete(
 		}
 	}
 
+	var actionsSecrets githubv1alpha1.GitHubActionsSecretList
+	if err := r.List(ctx, &actionsSecrets); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubActionsSecrets: %w", err)
+	}
+	for i := range actionsSecrets.Items {
+		resource := &actionsSecrets.Items[i]
+		if resource.Spec.Target.Organization != nil &&
+			resource.Spec.Target.Organization.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubActionsSecret %s/%s", resource.Namespace, resource.Name),
+			)
+		}
+	}
+
+	var actionsVariables githubv1alpha1.GitHubActionsVariableList
+	if err := r.List(ctx, &actionsVariables); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubActionsVariables: %w", err)
+	}
+	for i := range actionsVariables.Items {
+		resource := &actionsVariables.Items[i]
+		if resource.Spec.Target.Organization != nil &&
+			resource.Spec.Target.Organization.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubActionsVariable %s/%s", resource.Namespace, resource.Name),
+			)
+		}
+	}
+
 	controllerutil.RemoveFinalizer(provider, githubProviderConfigFinalizer)
 	if err := r.Update(ctx, provider); err != nil {
 		return ctrl.Result{}, fmt.Errorf("remove GitHubProviderConfig finalizer: %w", err)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *GitHubProviderConfigReconciler) providerInUse(
+	ctx context.Context,
+	provider *githubv1alpha1.GitHubProviderConfig,
+	dependency string,
+) (ctrl.Result, error) {
+	message := fmt.Sprintf("GitHubProviderConfig is still referenced by %s", dependency)
+	if err := r.setProviderReadyCondition(
+		ctx,
+		provider,
+		metav1.ConditionFalse,
+		"ProviderInUse",
+		message,
+	); err != nil {
+		return ctrl.Result{}, fmt.Errorf("update provider deletion status: %w", err)
+	}
+	return ctrl.Result{RequeueAfter: providerRequeueInterval}, nil
 }
 
 func (r *GitHubProviderConfigReconciler) setProviderReadyCondition(

@@ -46,6 +46,7 @@ const (
 type GitHubRepositoryReference struct {
 	// Name is the Kubernetes name of the GitHubRepository.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="repositoryRef.name is immutable"
 	Name string `json:"name"`
 }

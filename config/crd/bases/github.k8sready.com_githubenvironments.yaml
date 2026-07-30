@@ -4,27 +4,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: githubrepositoryteamaccesses.github.k8sready.com
+  name: githubenvironments.github.k8sready.com
 spec:
   group: github.k8sready.com
   names:
-    kind: GitHubRepositoryTeamAccess
-    listKind: GitHubRepositoryTeamAccessList
-    plural: githubrepositoryteamaccesses
+    kind: GitHubEnvironment
+    listKind: GitHubEnvironmentList
+    plural: githubenvironments
     shortNames:
-    - ghteamaccess
-    singular: githubrepositoryteamaccess
+    - ghenv
+    singular: githubenvironment
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.repository
       name: Repository
       type: string
-    - jsonPath: .spec.teamSlug
-      name: Team
-      type: string
-    - jsonPath: .status.permission
-      name: Permission
+    - jsonPath: .spec.name
+      name: Environment
       type: string
     - jsonPath: .spec.deletionPolicy
       name: Deletion Policy
@@ -38,8 +35,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: GitHubRepositoryTeamAccess assigns an existing GitHub team to
-          a repository.
+        description: GitHubEnvironment manages a basic GitHub deployment environment.
         properties:
           apiVersion:
             description: |-
@@ -59,26 +55,24 @@ spec:
           metadata:
             type: object
           spec:
-            description: GitHubRepositoryTeamAccessSpec defines a team assignment
-              to a repository.
+            description: GitHubEnvironmentSpec defines a basic repository deployment
+              environment.
             properties:
               deletionPolicy:
                 default: Orphan
                 description: DeletionPolicy controls whether deleting this resource
-                  revokes the team access.
+                  deletes the environment.
                 enum:
                 - Orphan
-                - Revoke
+                - Delete
                 type: string
-              permission:
-                description: Permission is the repository role granted to the team.
-                enum:
-                - pull
-                - triage
-                - push
-                - maintain
-                - admin
+              name:
+                description: Name is the GitHub environment name.
+                minLength: 1
                 type: string
+                x-kubernetes-validations:
+                - message: name is immutable
+                  rule: self == oldSelf
               repositoryRef:
                 description: RepositoryRef references a GitHubRepository in the same
                   namespace.
@@ -94,25 +88,16 @@ spec:
                 required:
                 - name
                 type: object
-              teamSlug:
-                description: TeamSlug is the URL slug of an existing GitHub organization
-                  team.
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: teamSlug is immutable
-                  rule: self == oldSelf
             required:
-            - permission
+            - name
             - repositoryRef
-            - teamSlug
             type: object
           status:
-            description: GitHubRepositoryTeamAccessStatus defines the observed team
-              assignment.
+            description: GitHubEnvironmentStatus defines the observed environment
+              state.
             properties:
               conditions:
-                description: Conditions describe the current reconciliation state.
+                description: Conditions describe the reconciliation state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -171,30 +156,25 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              environment:
+                description: Environment is the observed environment name.
+                type: string
+              environmentId:
+                description: EnvironmentID is the GitHub environment identifier.
+                format: int64
+                type: integer
               observedGeneration:
                 description: ObservedGeneration is the generation most recently reconciled.
                 format: int64
                 type: integer
               organization:
-                description: Organization is the resolved GitHub organization.
-                type: string
-              permission:
-                description: Permission is the permission currently observed in GitHub.
-                enum:
-                - pull
-                - triage
-                - push
-                - maintain
-                - admin
+                description: Organization is the resolved organization.
                 type: string
               providerConfigRef:
-                description: ProviderConfigRef is the provider used during reconciliation.
+                description: ProviderConfigRef is the resolved provider.
                 type: string
               repository:
-                description: Repository is the resolved GitHub repository name.
-                type: string
-              teamSlug:
-                description: TeamSlug is the reconciled team slug.
+                description: Repository is the resolved repository name.
                 type: string
             type: object
         type: object

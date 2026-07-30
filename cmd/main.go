@@ -241,6 +241,36 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryCollaborator")
 		os.Exit(1)
 	}
+
+	if err := (&controller.GitHubEnvironmentReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubEnvironment")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubActionsSecretReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsSecret")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubActionsVariableReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsVariable")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {
