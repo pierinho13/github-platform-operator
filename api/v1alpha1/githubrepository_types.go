@@ -20,6 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const DefaultGitHubProviderConfigName = "default"
+
 // RepositoryVisibility defines the visibility supported by GitHub repositories.
 // +kubebuilder:validation:Enum=public;private
 type RepositoryVisibility string
@@ -32,25 +34,88 @@ const (
 	RepositoryVisibilityPrivate RepositoryVisibility = "private"
 )
 
+// RepositoryDeletionPolicy defines what happens to the remote repository when
+// the GitHubRepository custom resource is deleted.
+// +kubebuilder:validation:Enum=Orphan;Delete
+type RepositoryDeletionPolicy string
+
+const (
+	// RepositoryDeletionPolicyOrphan keeps the GitHub repository when the custom resource is deleted.
+	RepositoryDeletionPolicyOrphan RepositoryDeletionPolicy = "Orphan"
+
+	// RepositoryDeletionPolicyDelete permanently deletes the GitHub repository with the custom resource.
+	RepositoryDeletionPolicyDelete RepositoryDeletionPolicy = "Delete"
+)
+
 // GitHubRepositorySpec defines the desired state of GitHubRepository.
 type GitHubRepositorySpec struct {
-	// Organization is the GitHub organization where the repository will be created.
+	// ProviderConfigRef references the cluster-scoped GitHubProviderConfig.
+	// +kubebuilder:default=default
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="providerConfigRef is immutable"
+	ProviderConfigRef string `json:"providerConfigRef,omitempty"`
+
+	// Organization is deprecated and ignored. Configure the organization through
+	// GitHubProviderConfig instead. It is temporarily retained for v1alpha1 migration.
+	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="organization is immutable"
-	Organization string `json:"organization"`
+	Organization string `json:"organization,omitempty"`
 
 	// Name is the name of the GitHub repository.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="name is immutable"
 	Name string `json:"name"`
 
-	// Visibility determines whether the repository is public or private.
-	// +kubebuilder:default=private
-	Visibility RepositoryVisibility `json:"visibility,omitempty"`
+	// Visibility determines whether the operator manages the repository visibility.
+	// When omitted, new repositories are created as private, while existing repositories
+	// keep their current visibility.
+	// +optional
+	Visibility *RepositoryVisibility `json:"visibility,omitempty"`
+
+	// DeletionPolicy determines whether deleting the custom resource also deletes
+	// the remote GitHub repository.
+	// +kubebuilder:default=Orphan
+	DeletionPolicy RepositoryDeletionPolicy `json:"deletionPolicy,omitempty"`
+}
+
+// EffectiveProviderConfigRef returns the configured provider or the default provider name.
+func (s GitHubRepositorySpec) EffectiveProviderConfigRef() string {
+	if s.ProviderConfigRef == "" {
+		return DefaultGitHubProviderConfigName
+	}
+
+	return s.ProviderConfigRef
+}
+
+// EffectiveDeletionPolicy returns the configured policy or the safe Orphan default.
+func (s GitHubRepositorySpec) EffectiveDeletionPolicy() RepositoryDeletionPolicy {
+	if s.DeletionPolicy == "" {
+		return RepositoryDeletionPolicyOrphan
+	}
+
+	return s.DeletionPolicy
+}
+
+// EffectiveVisibilityForCreation returns the requested visibility for a new
+// repository. Repositories are created private when visibility is omitted.
+func (s GitHubRepositorySpec) EffectiveVisibilityForCreation() RepositoryVisibility {
+	if s.Visibility == nil {
+		return RepositoryVisibilityPrivate
+	}
+
+	return *s.Visibility
 }
 
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
 type GitHubRepositoryStatus struct {
+	// ProviderConfigRef is the provider configuration used during reconciliation.
+	// +optional
+	ProviderConfigRef string `json:"providerConfigRef,omitempty"`
+
+	// Organization is the GitHub organization last observed from the provider configuration.
+	// +optional
+	Organization string `json:"organization,omitempty"`
+
 	// RepositoryID is the numeric identifier assigned by GitHub.
 	// +optional
 	RepositoryID int64 `json:"repositoryId,omitempty"`
@@ -77,9 +142,11 @@ type GitHubRepositoryStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=ghrepo
-// +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.spec.organization`
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.providerConfigRef`
+// +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.status.organization`
 // +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.status.visibility`
+// +kubebuilder:printcolumn:name="Deletion Policy",type=string,JSONPath=`.spec.deletionPolicy`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

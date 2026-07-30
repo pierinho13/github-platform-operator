@@ -1,0 +1,12 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubProviderConfig
+metadata:
+  name: default
+spec:
+  organization: k8sready
+  apiURL: https://api.github.com
+  credentials:
+    secretRef:
+      namespace: default
+      name: github-credentials
+      key: token
