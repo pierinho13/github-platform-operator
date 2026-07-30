@@ -4,5 +4,12 @@ resources:
 - github_v1alpha1_githubrepository.yaml
 - github_v1alpha1_githubrepositoryteamaccess.yaml
 - github_v1alpha1_githubrepositorycollaborator.yaml
+- github_v1alpha1_githubenvironment.yaml
+- github_v1alpha1_githubactionssecret.yaml
+- github_v1alpha1_githubactionsvariable.yaml
+- github_v1alpha1_githubactionssecret_environment.yaml
+- github_v1alpha1_githubactionsvariable_environment.yaml
+- github_v1alpha1_githubactionssecret_organization.yaml
+- github_v1alpha1_githubactionsvariable_organization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization

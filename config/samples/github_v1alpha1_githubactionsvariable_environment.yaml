@@ -1,0 +1,15 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubActionsVariable
+metadata:
+  name: production-api-url
+  namespace: default
+spec:
+  target:
+    environmentRef:
+      name: example-repository-production
+  name: API_URL
+  valueFrom:
+    secretKeyRef:
+      name: production-actions-values
+      key: api-url
+  deletionPolicy: Orphan

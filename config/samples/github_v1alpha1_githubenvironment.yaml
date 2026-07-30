@@ -1,0 +1,10 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubEnvironment
+metadata:
+  name: example-repository-production
+  namespace: default
+spec:
+  repositoryRef:
+    name: example-repository
+  name: production
+  deletionPolicy: Orphan

@@ -47,4 +47,31 @@ resources:
   kind: GitHubRepositoryCollaborator
   path: github.com/pierinho13/github-platform-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8sready.com
+  group: github
+  kind: GitHubEnvironment
+  path: github.com/pierinho13/github-platform-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8sready.com
+  group: github
+  kind: GitHubActionsSecret
+  path: github.com/pierinho13/github-platform-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: k8sready.com
+  group: github
+  kind: GitHubActionsVariable
+  path: github.com/pierinho13/github-platform-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

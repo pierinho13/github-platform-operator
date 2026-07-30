@@ -1,0 +1,15 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubActionsVariable
+metadata:
+  name: example-repository-aws-region
+  namespace: default
+spec:
+  target:
+    repositoryRef:
+      name: example-repository
+  name: AWS_REGION
+  valueFrom:
+    secretKeyRef:
+      name: github-actions-values
+      key: aws-region
+  deletionPolicy: Orphan
