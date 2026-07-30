@@ -99,8 +99,8 @@ type ActionsClientFactory interface {
 }
 
 // NewActionsClient creates a REST-backed Actions client.
-func (RESTClientFactory) NewActionsClient(token, baseURL string) (ActionsClient, error) {
-	return NewRESTClient(token, baseURL)
+func (f RESTClientFactory) NewActionsClient(token, baseURL string) (ActionsClient, error) {
+	return NewRESTClientWithHTTPClient(token, baseURL, f.HTTPClient)
 }
 
 // ActionsClient defines the GitHub operations used by the Actions controllers.

@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,6 +49,7 @@ type GitHubRepositoryReconciler struct {
 	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	GitHubClientFactory githubclient.RepositoryClientFactory
+	GitHubTokenProvider githubclient.TokenProvider
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -91,13 +91,16 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 			nil,
 			nil,
 			metav1.ConditionFalse,
-			"ProviderUnavailable",
+			dependencyFailureReason(err),
 			err.Error(),
 		)
 		if statusErr != nil {
 			return ctrl.Result{}, fmt.Errorf("%w; update failure status: %v", err, statusErr)
 		}
 
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -135,6 +138,9 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 			return ctrl.Result{}, fmt.Errorf("%w; update failure status: %v", err, statusErr)
 		}
 
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, err
 	}
 
@@ -172,43 +178,15 @@ func (r *GitHubRepositoryReconciler) resolveProvider(
 		return nil, nil, fmt.Errorf("get GitHubProviderConfig %q: %w", providerName, err)
 	}
 
-	reader := r.APIReader
-	if reader == nil {
-		reader = r.Client
-	}
-
-	secretRef := provider.Spec.Credentials.SecretRef
-	var secret corev1.Secret
-	if err := reader.Get(ctx, types.NamespacedName{
-		Namespace: secretRef.Namespace,
-		Name:      secretRef.Name,
-	}, &secret); err != nil {
-		return nil, nil, fmt.Errorf(
-			"get credentials Secret %s/%s: %w",
-			secretRef.Namespace,
-			secretRef.Name,
-			err,
-		)
-	}
-
-	tokenValue, ok := secret.Data[secretRef.Key]
-	if !ok {
-		return nil, nil, fmt.Errorf(
-			"credentials Secret %s/%s does not contain key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
-
-	token := strings.TrimSpace(string(tokenValue))
-	if token == "" {
-		return nil, nil, fmt.Errorf(
-			"credentials Secret %s/%s contains an empty key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
+	token, err := resolveProviderToken(
+		ctx,
+		r.Client,
+		r.APIReader,
+		r.GitHubTokenProvider,
+		&provider,
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	apiURL := provider.Spec.APIURL
@@ -427,6 +405,9 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 
 	provider, repositoryClient, err := r.resolveProvider(ctx, repository)
 	if err != nil {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("resolve provider for deletion: %w", err)
 	}
 
@@ -442,6 +423,9 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 		repository.Spec.Name,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf(
 			"delete GitHub repository %s/%s: %w",
 			provider.Spec.Organization,

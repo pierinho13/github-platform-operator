@@ -46,6 +46,7 @@ type GitHubRepositoryTeamAccessReconciler struct {
 	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	GitHubClientFactory githubclient.RepositoryAccessClientFactory
+	GitHubTokenProvider githubclient.TokenProvider
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositoryteamaccesses,verbs=get;list;watch;create;update;patch;delete
@@ -80,11 +81,12 @@ func (r *GitHubRepositoryTeamAccessReconciler) Reconcile(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		access.Namespace,
 		access.Spec.RepositoryRef,
 	)
 	if err != nil {
-		return r.fail(ctx, &access, nil, "DependencyUnavailable", err)
+		return r.fail(ctx, &access, nil, dependencyFailureReason(err), err)
 	}
 
 	if err := verifyRemoteRepository(ctx, resolved); err != nil {
@@ -171,10 +173,14 @@ func (r *GitHubRepositoryTeamAccessReconciler) reconcileDelete(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		access.Namespace,
 		access.Spec.RepositoryRef,
 	)
 	if err != nil {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("resolve team access dependencies for deletion: %w", err)
 	}
 
@@ -186,6 +192,9 @@ func (r *GitHubRepositoryTeamAccessReconciler) reconcileDelete(
 		resolved.Repository.Spec.Name,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf(
 			"revoke team %q access to %s/%s: %w",
 			access.Spec.TeamSlug,
@@ -254,6 +263,9 @@ func (r *GitHubRepositoryTeamAccessReconciler) fail(
 		reconcileErr.Error(),
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("%w; update status: %v", reconcileErr, err)
+	}
+	if result, ok := githubDeferredResult(reconcileErr); ok {
+		return result, nil
 	}
 	return ctrl.Result{}, reconcileErr
 }

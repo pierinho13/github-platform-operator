@@ -42,6 +42,7 @@ type GitHubRepositoryCollaboratorReconciler struct {
 	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	GitHubClientFactory githubclient.RepositoryAccessClientFactory
+	GitHubTokenProvider githubclient.TokenProvider
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositorycollaborators,verbs=get;list;watch;create;update;patch;delete
@@ -76,11 +77,12 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		collaborator.Namespace,
 		collaborator.Spec.RepositoryRef,
 	)
 	if err != nil {
-		return r.fail(ctx, &collaborator, nil, "DependencyUnavailable", err)
+		return r.fail(ctx, &collaborator, nil, dependencyFailureReason(err), err)
 	}
 	if err := verifyRemoteRepository(ctx, resolved); err != nil {
 		return r.fail(ctx, &collaborator, resolved, "RepositoryUnavailable", err)
@@ -220,10 +222,14 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		collaborator.Namespace,
 		collaborator.Spec.RepositoryRef,
 	)
 	if err != nil {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("resolve collaborator dependencies for deletion: %w", err)
 	}
 
@@ -234,6 +240,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 		collaborator.Spec.Username,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf(
 			"get collaborator %q access before deletion: %w",
 			collaborator.Spec.Username,
@@ -256,6 +265,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 		invitationID,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf(
 			"revoke collaborator %q access to %s/%s: %w",
 			collaborator.Spec.Username,
@@ -296,6 +308,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) fail(
 		reconcileErr.Error(),
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("%w; update status: %v", reconcileErr, err)
+	}
+	if result, ok := githubDeferredResult(reconcileErr); ok {
+		return result, nil
 	}
 	return ctrl.Result{}, reconcileErr
 }

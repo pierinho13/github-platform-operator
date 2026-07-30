@@ -30,15 +30,38 @@ type NamespacedSecretKeyReference struct {
 	// +kubebuilder:validation:MinLength=1
 	Name string `json:"name"`
 
-	// Key is the key containing the GitHub token.
+	// Key is the key containing the GitHub token or GitHub App private key.
 	// +kubebuilder:validation:MinLength=1
 	Key string `json:"key"`
 }
 
-// GitHubProviderCredentials defines how the provider reads GitHub credentials.
+// GitHubAppCredentials configures authentication as a GitHub App installation.
+type GitHubAppCredentials struct {
+	// AppID is the GitHub App client ID or numeric app ID used as the JWT issuer.
+	// GitHub recommends using the client ID.
+	// +kubebuilder:validation:MinLength=1
+	AppID string `json:"appID"`
+
+	// InstallationID is the GitHub App installation ID.
+	// +kubebuilder:validation:Minimum=1
+	InstallationID int64 `json:"installationID"`
+
+	// PrivateKeySecretRef references the PEM-encoded GitHub App private key.
+	PrivateKeySecretRef NamespacedSecretKeyReference `json:"privateKeySecretRef"`
+}
+
+// GitHubProviderCredentials defines how the provider authenticates to GitHub.
+// Exactly one of secretRef or githubApp must be configured.
+// +kubebuilder:validation:XValidation:rule="has(self.secretRef) != has(self.githubApp)",message="exactly one of secretRef or githubApp must be configured"
 type GitHubProviderCredentials struct {
-	// SecretRef references the Secret containing the GitHub token.
-	SecretRef NamespacedSecretKeyReference `json:"secretRef"`
+	// SecretRef references a Secret containing a personal access token or
+	// another already-issued GitHub token.
+	// +optional
+	SecretRef *NamespacedSecretKeyReference `json:"secretRef,omitempty"`
+
+	// GitHubApp configures short-lived installation access tokens.
+	// +optional
+	GitHubApp *GitHubAppCredentials `json:"githubApp,omitempty"`
 }
 
 // GitHubProviderConfigSpec defines a reusable GitHub organization connection.
@@ -54,8 +77,15 @@ type GitHubProviderConfigSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="apiURL is immutable"
 	APIURL string `json:"apiURL,omitempty"`
 
-	// Credentials defines where the GitHub token is stored.
+	// Credentials defines how the provider authenticates to GitHub.
 	Credentials GitHubProviderCredentials `json:"credentials"`
+
+	// Suspended stops all remote reconciliation through this provider.
+	// Kubernetes resources and finalizers are retained, and no GitHub API
+	// requests are made until the provider is resumed.
+	// +kubebuilder:default=false
+	// +optional
+	Suspended bool `json:"suspended,omitempty"`
 }
 
 // GitHubProviderConfigStatus defines the observed provider configuration state.
@@ -76,6 +106,7 @@ type GitHubProviderConfigStatus struct {
 // +kubebuilder:resource:scope=Cluster,shortName=ghprovider
 // +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.spec.organization`
 // +kubebuilder:printcolumn:name="API URL",type=string,JSONPath=`.spec.apiURL`
+// +kubebuilder:printcolumn:name="Suspended",type=boolean,JSONPath=`.spec.suspended`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

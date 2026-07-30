@@ -57,7 +57,7 @@ var _ = Describe("GitHubProviderConfig Controller", func() {
 				Organization: testOrganization,
 				APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 				Credentials: githubv1alpha1.GitHubProviderCredentials{
-					SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
+					SecretRef: &githubv1alpha1.NamespacedSecretKeyReference{
 						Namespace: testDefaultName,
 						Name:      secretName,
 						Key:       testTokenKey,
@@ -110,4 +110,67 @@ var _ = Describe("GitHubProviderConfig Controller", func() {
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("CredentialsAvailable"))
 	})
+
+	It("should report a suspended provider without reading remote GitHub state", func() {
+		reconciler := &GitHubProviderConfigReconciler{
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+		}
+		request := reconcile.Request{NamespacedName: providerKey}
+
+		_, err := reconciler.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		provider := &githubv1alpha1.GitHubProviderConfig{}
+		Expect(k8sClient.Get(ctx, providerKey, provider)).To(Succeed())
+		provider.Spec.Suspended = true
+		Expect(k8sClient.Update(ctx, provider)).To(Succeed())
+
+		_, err = reconciler.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(k8sClient.Get(ctx, providerKey, provider)).To(Succeed())
+		condition := meta.FindStatusCondition(provider.Status.Conditions, conditionTypeReady)
+		Expect(condition).NotTo(BeNil())
+		Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+		Expect(condition.Reason).To(Equal("ReconciliationSuspended"))
+	})
+
+	It("should validate GitHub App credentials from a private-key Secret", func() {
+		reconciler := &GitHubProviderConfigReconciler{
+			Client:    k8sClient,
+			APIReader: k8sClient,
+			Scheme:    k8sClient.Scheme(),
+		}
+		request := reconcile.Request{NamespacedName: providerKey}
+
+		_, err := reconciler.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		provider := &githubv1alpha1.GitHubProviderConfig{}
+		Expect(k8sClient.Get(ctx, providerKey, provider)).To(Succeed())
+		provider.Spec.Credentials = githubv1alpha1.GitHubProviderCredentials{
+			GitHubApp: &githubv1alpha1.GitHubAppCredentials{
+				AppID:          "Iv1.example",
+				InstallationID: 1234,
+				PrivateKeySecretRef: githubv1alpha1.NamespacedSecretKeyReference{
+					Namespace: testDefaultName,
+					Name:      secretName,
+					Key:       testTokenKey,
+				},
+			},
+		}
+		Expect(k8sClient.Update(ctx, provider)).To(Succeed())
+
+		_, err = reconciler.Reconcile(ctx, request)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(k8sClient.Get(ctx, providerKey, provider)).To(Succeed())
+		condition := meta.FindStatusCondition(provider.Status.Conditions, conditionTypeReady)
+		Expect(condition).NotTo(BeNil())
+		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+		Expect(condition.Reason).To(Equal("CredentialsAvailable"))
+	})
+
 })

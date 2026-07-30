@@ -1,0 +1,76 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryRuleset
+metadata:
+  name: example-protect-default-branch
+  namespace: github-platform-operator-system
+spec:
+  repositoryRef:
+    name: example
+  name: protect-default-branch
+  target: branch
+  enforcement: active
+  bypassActors:
+    - actorType: Team
+      actorID: 123456
+      bypassMode: pull_request
+  conditions:
+    refName:
+      include:
+        - "~DEFAULT_BRANCH"
+      exclude: []
+  rules:
+    - type: deletion
+    - type: non_fast_forward
+    - type: required_linear_history
+    - type: required_signatures
+    - type: pull_request
+      parameters:
+        allowed_merge_methods:
+          - squash
+          - rebase
+        dismiss_stale_reviews_on_push: true
+        dismissal_restriction:
+          enabled: false
+          allowed_actors: []
+        require_code_owner_review: true
+        require_last_push_approval: true
+        required_approving_review_count: 1
+        required_review_thread_resolution: true
+        required_reviewers: []
+    - type: required_status_checks
+      parameters:
+        do_not_enforce_on_create: false
+        strict_required_status_checks_policy: true
+        required_status_checks:
+          - context: test
+          - context: lint
+  deletionPolicy: Orphan
+---
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryRuleset
+metadata:
+  name: example-push-restrictions
+  namespace: github-platform-operator-system
+spec:
+  repositoryRef:
+    name: example
+  name: push-restrictions
+  target: push
+  enforcement: active
+  rules:
+    - type: file_path_restriction
+      parameters:
+        restricted_file_paths:
+          - secrets/**
+    - type: max_file_path_length
+      parameters:
+        max_file_path_length: 255
+    - type: file_extension_restriction
+      parameters:
+        restricted_file_extensions:
+          - exe
+          - dll
+    - type: max_file_size
+      parameters:
+        max_file_size: 100
+  deletionPolicy: Orphan

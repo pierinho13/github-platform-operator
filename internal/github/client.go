@@ -19,6 +19,7 @@ package github
 import (
 	"context"
 	"errors"
+	"net/http"
 )
 
 // ErrNotFound indicates that a GitHub repository does not exist.
@@ -66,12 +67,15 @@ type RepositoryClientFactory interface {
 	NewRepositoryClient(token, baseURL string) (RepositoryClient, error)
 }
 
-// RESTClientFactory creates REST-backed GitHub repository clients.
-type RESTClientFactory struct{}
+// RESTClientFactory creates REST-backed GitHub clients.
+// Reusing one factory shares its HTTP transport and global rate-limit gate.
+type RESTClientFactory struct {
+	HTTPClient *http.Client
+}
 
 // NewRepositoryClient creates a REST-backed repository client.
-func (RESTClientFactory) NewRepositoryClient(token, baseURL string) (RepositoryClient, error) {
-	return NewRESTClient(token, baseURL)
+func (f RESTClientFactory) NewRepositoryClient(token, baseURL string) (RepositoryClient, error) {
+	return NewRESTClientWithHTTPClient(token, baseURL, f.HTTPClient)
 }
 
 // RepositoryClient defines the GitHub repository operations used by the controller.

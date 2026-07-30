@@ -1,7 +1,9 @@
 ## Append samples of your project ##
 resources:
 - github_v1alpha1_githubproviderconfig.yaml
+- github_v1alpha1_githubproviderconfig_app.yaml
 - github_v1alpha1_githubrepository.yaml
+- github_v1alpha1_githubrepositoryruleset.yaml
 - github_v1alpha1_githubrepositoryteamaccess.yaml
 - github_v1alpha1_githubrepositorycollaborator.yaml
 - github_v1alpha1_githubenvironment.yaml
