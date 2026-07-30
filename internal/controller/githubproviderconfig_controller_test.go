@@ -45,22 +45,22 @@ var _ = Describe("GitHubProviderConfig Controller", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      secretName,
-				Namespace: "default",
+				Namespace: testDefaultName,
 			},
-			Data: map[string][]byte{"token": []byte("test-token")},
+			Data: map[string][]byte{testTokenKey: []byte("test-token")},
 		}
 		Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 		provider := &githubv1alpha1.GitHubProviderConfig{
 			ObjectMeta: metav1.ObjectMeta{Name: providerName},
 			Spec: githubv1alpha1.GitHubProviderConfigSpec{
-				Organization: "k8sready",
+				Organization: testOrganization,
 				APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 				Credentials: githubv1alpha1.GitHubProviderCredentials{
 					SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
-						Namespace: "default",
+						Namespace: testDefaultName,
 						Name:      secretName,
-						Key:       "token",
+						Key:       testTokenKey,
 					},
 				},
 			},
@@ -81,7 +81,7 @@ var _ = Describe("GitHubProviderConfig Controller", func() {
 		}
 
 		secret := &corev1.Secret{}
-		secretKey := types.NamespacedName{Namespace: "default", Name: secretName}
+		secretKey := types.NamespacedName{Namespace: testDefaultName, Name: secretName}
 		if err := k8sClient.Get(ctx, secretKey, secret); err == nil {
 			Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
 		}
@@ -105,7 +105,7 @@ var _ = Describe("GitHubProviderConfig Controller", func() {
 
 		provider := &githubv1alpha1.GitHubProviderConfig{}
 		Expect(k8sClient.Get(ctx, providerKey, provider)).To(Succeed())
-		condition := meta.FindStatusCondition(provider.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(provider.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("CredentialsAvailable"))

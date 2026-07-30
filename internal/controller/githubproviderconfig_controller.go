@@ -252,7 +252,7 @@ func (r *GitHubProviderConfigReconciler) setProviderReadyCondition(
 	provider.Status.ObservedGeneration = provider.Generation
 
 	meta.SetStatusCondition(&provider.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             conditionStatus,
 		ObservedGeneration: provider.Generation,
 		Reason:             reason,

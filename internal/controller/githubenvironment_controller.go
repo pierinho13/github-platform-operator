@@ -273,7 +273,7 @@ func (r *GitHubEnvironmentReconciler) setReadyCondition(
 		environment.Status.EnvironmentID = remote.ID
 	}
 	meta.SetStatusCondition(&environment.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             status,
 		ObservedGeneration: environment.Generation,
 		Reason:             reason,

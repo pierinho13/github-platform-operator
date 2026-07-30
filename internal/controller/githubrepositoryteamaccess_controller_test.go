@@ -42,7 +42,7 @@ var _ = Describe("GitHubRepositoryTeamAccess Controller", func() {
 	)
 
 	ctx := context.Background()
-	accessKey := types.NamespacedName{Name: accessName, Namespace: "default"}
+	accessKey := types.NamespacedName{Name: accessName, Namespace: testDefaultName}
 
 	BeforeEach(func() {
 		createRepositoryAccessDependencies(
@@ -54,7 +54,7 @@ var _ = Describe("GitHubRepositoryTeamAccess Controller", func() {
 		)
 
 		access := &githubv1alpha1.GitHubRepositoryTeamAccess{
-			ObjectMeta: metav1.ObjectMeta{Name: accessName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: accessName, Namespace: testDefaultName},
 			Spec: githubv1alpha1.GitHubRepositoryTeamAccessSpec{
 				RepositoryRef: githubv1alpha1.GitHubRepositoryReference{
 					Name: repositoryResourceName,
@@ -92,7 +92,7 @@ var _ = Describe("GitHubRepositoryTeamAccess Controller", func() {
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
 			ID:         10,
 			HTMLURL:    "https://github.com/k8sready/" + repositoryName,
-			Visibility: "private",
+			Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeRepositoryAccessClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryTeamAccessReconciler{
@@ -114,10 +114,10 @@ var _ = Describe("GitHubRepositoryTeamAccess Controller", func() {
 
 		access := &githubv1alpha1.GitHubRepositoryTeamAccess{}
 		Expect(k8sClient.Get(ctx, accessKey, access)).To(Succeed())
-		Expect(access.Status.Organization).To(Equal("k8sready"))
+		Expect(access.Status.Organization).To(Equal(testOrganization))
 		Expect(access.Status.Repository).To(Equal(repositoryName))
 		Expect(access.Status.Permission).To(Equal(githubv1alpha1.RepositoryPermissionMaintain))
-		condition := meta.FindStatusCondition(access.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(access.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("AccessConfigured"))
@@ -145,7 +145,7 @@ var _ = Describe("GitHubRepositoryTeamAccess Controller", func() {
 	It("should orphan team access by default", func() {
 		fakeClient := newFakeRepositoryAccessClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 10, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 10, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeRepositoryAccessClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryTeamAccessReconciler{

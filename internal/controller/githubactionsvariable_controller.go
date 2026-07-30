@@ -272,7 +272,7 @@ func (r *GitHubActionsVariableReconciler) setReadyCondition(
 		resource.Status.RemoteUpdatedAt = formatGitHubTime(remote.UpdatedAt)
 	}
 	meta.SetStatusCondition(&resource.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             status,
 		ObservedGeneration: resource.Generation,
 		Reason:             reason,
