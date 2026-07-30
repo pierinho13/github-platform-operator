@@ -39,11 +39,17 @@ jobs:
 
       - name: Install semantic version utility
         shell: bash
+        env:
+          SVU_VERSION: v3.2.3
         run: |
           set -euo pipefail
 
-          go install github.com/caarlos0/svu/v3@v3.4.1
-          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
+          go install "github.com/caarlos0/svu/v3@${SVU_VERSION}"
+
+          svu_bin="$(go env GOPATH)/bin"
+          echo "${svu_bin}" >> "${GITHUB_PATH}"
+
+          "${svu_bin}/svu" --version
 
       - name: Resolve next release version
         id: version
