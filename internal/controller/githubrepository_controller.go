@@ -495,7 +495,7 @@ func (r *GitHubRepositoryReconciler) setReadyCondition(
 	repository.Status.ObservedGeneration = repository.Generation
 
 	meta.SetStatusCondition(&repository.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             conditionStatus,
 		ObservedGeneration: repository.Generation,
 		Reason:             reason,

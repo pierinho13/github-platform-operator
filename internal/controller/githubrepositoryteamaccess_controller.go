@@ -280,7 +280,7 @@ func (r *GitHubRepositoryTeamAccessReconciler) setReadyCondition(
 	}
 
 	meta.SetStatusCondition(&access.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             status,
 		ObservedGeneration: access.Generation,
 		Reason:             reason,

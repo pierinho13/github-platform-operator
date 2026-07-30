@@ -113,7 +113,7 @@ func (f *fakeRepositoryClient) CreateRepository(
 
 	visibility := "public"
 	if private {
-		visibility = "private"
+		visibility = string(githubv1alpha1.RepositoryVisibilityPrivate)
 	}
 
 	repository := &githubclient.Repository{
@@ -207,36 +207,36 @@ var _ = Describe("GitHubRepository Controller", func() {
 	Context("When reconciling a resource through a provider config", func() {
 		const (
 			resourceName = "test-resource"
-			providerName = "default"
+			providerName = testDefaultName
 			secretName   = "github-credentials"
 		)
 
 		ctx := context.Background()
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default",
+			Namespace: testDefaultName,
 		}
 
 		BeforeEach(func() {
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      secretName,
-					Namespace: "default",
+					Namespace: testDefaultName,
 				},
-				Data: map[string][]byte{"token": []byte("test-token")},
+				Data: map[string][]byte{testTokenKey: []byte("test-token")},
 			}
 			Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 			provider := &githubv1alpha1.GitHubProviderConfig{
 				ObjectMeta: metav1.ObjectMeta{Name: providerName},
 				Spec: githubv1alpha1.GitHubProviderConfigSpec{
-					Organization: "k8sready",
+					Organization: testOrganization,
 					APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 					Credentials: githubv1alpha1.GitHubProviderCredentials{
 						SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
-							Namespace: "default",
+							Namespace: testDefaultName,
 							Name:      secretName,
-							Key:       "token",
+							Key:       testTokenKey,
 						},
 					},
 				},
@@ -246,7 +246,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			resource := &githubv1alpha1.GitHubRepository{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: testDefaultName,
 				},
 				Spec: githubv1alpha1.GitHubRepositorySpec{
 					ProviderConfigRef: providerName,
@@ -284,7 +284,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 
 			secret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{
-				Namespace: "default",
+				Namespace: testDefaultName,
 				Name:      secretName,
 			}, secret); err == nil {
 				Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
@@ -320,13 +320,13 @@ var _ = Describe("GitHubRepository Controller", func() {
 
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(resource.Status.ProviderConfigRef).To(Equal(providerName))
-			Expect(resource.Status.Organization).To(Equal("k8sready"))
+			Expect(resource.Status.Organization).To(Equal(testOrganization))
 			Expect(resource.Status.RepositoryID).To(Equal(int64(1)))
 			Expect(resource.Status.URL).To(Equal("https://github.com/k8sready/test-resource"))
 			Expect(resource.Status.Visibility).To(Equal(githubv1alpha1.RepositoryVisibilityPrivate))
 			Expect(resource.Status.ObservedGeneration).To(Equal(resource.Generation))
 
-			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(readyCondition.Reason).To(Equal("RepositoryCreated"))
@@ -378,7 +378,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			_, err = controllerReconciler.Reconcile(ctx, request)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(fakeGitHubClient.createCalls).To(Equal(1))
-			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Visibility).To(Equal("private"))
+			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Visibility).To(Equal(string(githubv1alpha1.RepositoryVisibilityPrivate)))
 
 			By("removing only the custom resource")
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
@@ -400,7 +400,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
 				ID:             43,
 				HTMLURL:        "https://github.com/k8sready/test-resource",
-				Visibility:     "private",
+				Visibility:     string(githubv1alpha1.RepositoryVisibilityPrivate),
 				Description:    "old description",
 				Homepage:       "https://old.example.com",
 				Topics:         []string{"legacy"},
@@ -444,7 +444,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(fakeGitHubClient.topicCalls).To(Equal(1))
 
 			remote := fakeGitHubClient.repositories["k8sready/test-resource"]
-			Expect(remote.Visibility).To(Equal("private"))
+			Expect(remote.Visibility).To(Equal(string(githubv1alpha1.RepositoryVisibilityPrivate)))
 			Expect(remote.Description).To(Equal("Platform API"))
 			Expect(remote.Homepage).To(Equal("https://platform.example.com"))
 			Expect(remote.Topics).To(ConsistOf("kubernetes", "platform"))
@@ -462,7 +462,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(resource.Status.Features.Wiki).To(BeFalse())
 			Expect(resource.Status.Features.Discussions).To(BeTrue())
 
-			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Reason).To(Equal("RepositoryUpdated"))
 		})
@@ -523,7 +523,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(resource.Status.Homepage).To(Equal("https://existing.example.com"))
 			Expect(resource.Status.Topics).To(ConsistOf("existing", "repository"))
 
-			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Reason).To(Equal("RepositoryAvailable"))
 		})
