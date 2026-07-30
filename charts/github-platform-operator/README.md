@@ -1,5 +1,11 @@
 # GitHub Platform Operator Helm chart
 
+OCI location:
+
+```text
+oci://ghcr.io/pierinho13/charts/github-platform-operator
+```
+
 ## Install
 
 ```bash
@@ -16,9 +22,7 @@ The controller image defaults to:
 ghcr.io/pierinho13/github-platform-operator:<chart appVersion>
 ```
 
-## Configuration
-
-Common values:
+## Common values
 
 ```yaml
 replicaCount: 1
@@ -28,13 +32,16 @@ image:
   tag: ""
   pullPolicy: IfNotPresent
 
+leaderElection:
+  enabled: true
+
 metrics:
   enabled: true
   secure: true
   port: 8443
 
-leaderElection:
-  enabled: true
+networkPolicy:
+  enabled: false
 
 resources:
   requests:
@@ -45,11 +52,36 @@ resources:
     memory: 128Mi
 ```
 
-## CRDs
+Show every value:
 
-The packaged chart contains the generated CRDs under `crds/`. Helm installs
-these CRDs before rendering the controller resources.
+```bash
+helm show values \
+  oci://ghcr.io/pierinho13/charts/github-platform-operator \
+  --version 0.1.0
+```
 
-Helm does not upgrade or delete resources stored under a chart's `crds/`
-directory. Before upgrading across a release that changes CRD schemas, apply
-the CRDs from the target release and then run `helm upgrade`.
+## Custom image
+
+```bash
+helm upgrade --install github-platform-operator \
+  ./charts/github-platform-operator \
+  --namespace github-platform-operator-system \
+  --create-namespace \
+  --set image.repository=example.com/github-platform-operator \
+  --set image.tag=dev
+```
+
+## CRDs and upgrades
+
+The packaged chart includes generated CRDs under `crds/`. Helm installs them
+before the controller resources.
+
+Helm does not upgrade or delete resources under `crds/`. When a release changes
+CRD schemas, apply the target CRDs before running `helm upgrade`:
+
+```bash
+kubectl apply -f config/crd/bases/
+```
+
+See [operations](../../docs/operations.md) for the complete upgrade and
+uninstallation procedure.
