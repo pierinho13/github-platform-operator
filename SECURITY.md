@@ -2,35 +2,81 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest released version of `github-platform-operator`.
+Security fixes are applied to the latest released version of
+`github-platform-operator`.
 
 ## Reporting a vulnerability
 
-Please do not report security vulnerabilities through public GitHub issues.
+Do not report security vulnerabilities through public GitHub issues.
 
-Use GitHub's private vulnerability reporting feature for this repository when available.
+Use GitHub's private vulnerability reporting feature for this repository when
+available. Include:
 
-Include:
-
-- a clear description of the issue
+- a clear description
 - affected versions
-- steps to reproduce
+- reproduction steps
 - potential impact
-- any suggested mitigation
+- suggested mitigation, when known
 
-Please avoid including real Kubernetes Secret values, credentials, access tokens, kubeconfig files, private cluster information, or other sensitive data.
+Do not include real tokens, Secret values, kubeconfig files, private repository
+contents or other sensitive data.
 
-## Security considerations
+## Security model
 
-`github-platform-operator` reads Kubernetes Secrets and prints decoded values directly to the terminal.
+The operator needs access to two categories of Kubernetes Secrets:
 
-Users should be aware that Secret values may remain visible in:
+1. GitHub credentials referenced by `GitHubProviderConfig`.
+2. Values referenced by `GitHubActionsSecret` and `GitHubActionsVariable`.
 
-- terminal scrollback
-- shell session recordings
-- screenshots
-- shared terminals
-- screen-sharing sessions
-- captured command output
+The current controller watches Secrets so that Actions values rotate
+automatically. Its cluster role therefore includes `get`, `list` and `watch`
+for Kubernetes Secrets.
 
-Use the tool only in trusted environments and with the minimum Kubernetes permissions required.
+Treat installation of the operator as a privileged cluster operation:
+
+- run it in a dedicated namespace
+- restrict who can create provider and Actions resources
+- limit access to the controller service account
+- enable Kubernetes Secret encryption at rest
+- prefer an external secret manager for production values
+- audit changes to deletion policies and provider references
+
+## GitHub credentials
+
+Use the minimum GitHub permissions required for the resources being managed.
+Prefer short-lived GitHub App installation tokens when practical. Rotate
+long-lived personal access tokens regularly.
+
+Never place the GitHub token directly in a custom resource or Helm values.
+Reference it through a Kubernetes Secret.
+
+## Actions secrets and variables
+
+`GitHubActionsSecret` values are read from Kubernetes, encrypted with GitHub's
+public key and sent to GitHub. The plaintext value is not stored in custom
+resource status.
+
+Avoid logging or debugging changes that could print source Secret data.
+
+`GitHubActionsVariable` also reads from a Kubernetes Secret for a consistent
+API, but the resulting GitHub variable is not confidential. Never use
+`GitHubActionsVariable` for passwords, tokens or private keys.
+
+## Destructive operations
+
+Remote deletion and access revocation require explicit policies:
+
+```text
+Delete
+Revoke
+```
+
+The default is `Orphan`.
+
+Restrict permission to update or delete the custom resources because a user who
+can change the deletion policy may trigger destructive GitHub operations.
+
+## Public disclosure
+
+After a fix is available, maintainers may publish a security advisory describing
+affected versions, impact and remediation.

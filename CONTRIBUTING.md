@@ -1,16 +1,16 @@
-# Contributing to github-platform-operator
+# Contributing
 
-Thank you for your interest in contributing to `github-platform-operator`.
+Thank you for contributing to `github-platform-operator`.
 
-The project aims to remain small, simple, and easy to use. Contributions should preserve that focus.
+The project aims to remain small, useful and easy to operate. New features
+should solve a common repository-platform workflow without turning the project
+into a complete GitHub API provider.
 
-## Requirements
+## Start here
 
-- Go installed
-- A valid Kubernetes kubeconfig
-- Access to a Kubernetes cluster for manual testing
-
-## Development setup
+- [Development guide](docs/development.md)
+- [Custom resources](docs/resources.md)
+- [Security policy](SECURITY.md)
 
 Clone the repository:
 
@@ -19,114 +19,95 @@ git clone https://github.com/pierinho13/github-platform-operator.git
 cd github-platform-operator
 ```
 
-Download dependencies:
+Build the manager:
 
 ```bash
-go mod download
+go build -o bin/manager ./cmd
 ```
 
-Run the tests:
+## Branches and commits
+
+Create a focused branch from `main`:
 
 ```bash
-go test ./...
+git switch main
+git pull --ff-only
+git switch -c feat/my-change
 ```
 
-Build the project:
-
-```bash
-go build -o github-platform-operator .
-```
-
-Run it locally:
-
-```bash
-./github-platform-operator
-```
-
-## Code quality
-
-Before opening a pull request, run:
-
-```bash
-gofmt -w .
-go vet ./...
-go test ./...
-```
-
-You can also validate the release configuration with:
-
-```bash
-goreleaser release --snapshot --clean
-```
-
-## Branches
-
-Create a branch from `main`:
-
-```bash
-git checkout main
-git pull
-git checkout -b feat/my-change
-```
-
-Use a clear branch name, such as:
+Use clear commit messages, for example:
 
 ```text
-feat/add-new-workload
-fix/empty-secret-output
-docs/update-installation
+feat(actions): add environment variables
+fix(repository): preserve unmanaged topics
+docs: update Helm installation
+test(access): cover pending invitations
 ```
 
-## Commits
+## Pull request checklist
 
-Use clear and focused commit messages.
+Before opening a pull request:
 
-Examples:
-
-```text
-feat: add Secret usage discovery
-fix: handle empty namespaces
-docs: update Homebrew installation
-test: cover Secret volume references
+```bash
+make generate manifests
+make fmt
+make vet
+make test
+make lint
+git diff --check
 ```
-
-## Pull requests
 
 A pull request should:
 
-- explain the problem or feature
-- describe the changes
-- include tests when appropriate
-- keep unrelated changes out of the same PR
-- pass `go test ./...`
-- preserve the tool's simple user experience
+- explain the problem and the chosen scope
+- include tests for changed behavior
+- include generated files when API or RBAC markers change
+- update user documentation and samples when behavior changes
+- avoid unrelated refactors
+- preserve safe adoption and non-destructive defaults
 
-## Reporting bugs
+## Helm and release validation
 
-Use the bug report template and include:
+Validate the chart locally:
 
-- `github-platform-operator` version
-- operating system
+```bash
+./hack/package-helm-chart.sh 0.1.0-dev v0.1.0-dev
+```
+
+Validate GoReleaser after packaging the chart:
+
+```bash
+goreleaser check
+goreleaser release --snapshot --clean
+```
+
+The release workflow and maintainer steps are documented in
+[`docs/releasing.md`](docs/releasing.md).
+
+## Bug reports
+
+Include:
+
+- operator version
 - Kubernetes version
-- relevant command
-- expected behavior
-- actual behavior
-- steps to reproduce
+- installation method
+- affected custom resource
+- relevant status conditions and controller logs
+- reproduction steps
 
-Do not include real Secret values, tokens, credentials, kubeconfig contents, or other sensitive information.
+Never include real GitHub tokens, Actions secret values, kubeconfig contents or
+other credentials.
 
 ## Feature requests
 
-Feature requests are welcome, especially when they improve usability without adding unnecessary complexity.
+Describe:
 
-Please describe:
-
-- the problem you are trying to solve
-- the expected behavior
-- why it fits the scope of `github-platform-operator`
+- the platform problem
+- the expected declarative API
+- why it belongs in this focused operator instead of a general provider
+- the smallest useful implementation
 
 ## Security issues
 
-Do not report security vulnerabilities in public issues.
-
-See [SECURITY.md](SECURITY.md) for reporting instructions.
+Do not report vulnerabilities in public issues. Follow
+[`SECURITY.md`](SECURITY.md).
