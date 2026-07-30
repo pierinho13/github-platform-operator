@@ -24,7 +24,10 @@ import (
 	"testing"
 )
 
-const repositorySettingsTopicKubernetes = "kubernetes"
+const (
+	repositorySettingsTopicKubernetes = "kubernetes"
+	repositorySettingsTopicPlatform   = "platform"
+)
 
 func TestUpdateRepositorySettings(t *testing.T) {
 	t.Parallel()
@@ -122,7 +125,7 @@ func TestReplaceRepositoryTopics(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if len(body.Names) != 2 || body.Names[0] != repositorySettingsTopicKubernetes || body.Names[1] != "platform" {
+		if len(body.Names) != 2 || body.Names[0] != repositorySettingsTopicKubernetes || body.Names[1] != repositorySettingsTopicPlatform {
 			t.Fatalf("unexpected topics %#v", body.Names)
 		}
 
@@ -140,12 +143,12 @@ func TestReplaceRepositoryTopics(t *testing.T) {
 		context.Background(),
 		"k8sready",
 		"example-repository",
-		[]string{repositorySettingsTopicKubernetes, "platform"},
+		[]string{repositorySettingsTopicKubernetes, repositorySettingsTopicPlatform},
 	)
 	if err != nil {
 		t.Fatalf("replace topics: %v", err)
 	}
-	if len(topics) != 2 || topics[0] != repositorySettingsTopicKubernetes || topics[1] != "platform" {
+	if len(topics) != 2 || topics[0] != repositorySettingsTopicKubernetes || topics[1] != repositorySettingsTopicPlatform {
 		t.Fatalf("unexpected response topics %#v", topics)
 	}
 }
