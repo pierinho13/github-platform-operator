@@ -9,7 +9,7 @@ A release publishes:
 4. an OCI Helm chart at
    `oci://ghcr.io/pierinho13/charts/github-platform-operator`
 
-## Pre-release checks
+## Pre-release checks 
 
 Run:
 
