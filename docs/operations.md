@@ -10,7 +10,7 @@ kubectl get \
   -A
 ```
 
-Inspect a resource and its conditions:
+Inspect a resource and its conditions:  
 
 ```bash
 kubectl get ghrepo example-repository -o yaml
