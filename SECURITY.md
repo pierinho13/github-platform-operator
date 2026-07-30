@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest released version of `kubectl-peek`.
+Security fixes are applied to the latest released version of `github-platform-operator`.
 
 ## Reporting a vulnerability
 
@@ -22,7 +22,7 @@ Please avoid including real Kubernetes Secret values, credentials, access tokens
 
 ## Security considerations
 
-`kubectl-peek` reads Kubernetes Secrets and prints decoded values directly to the terminal.
+`github-platform-operator` reads Kubernetes Secrets and prints decoded values directly to the terminal.
 
 Users should be aware that Secret values may remain visible in:
 

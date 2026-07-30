@@ -1,6 +1,6 @@
-# Contributing to kubectl-peek
+# Contributing to github-platform-operator
 
-Thank you for your interest in contributing to `kubectl-peek`.
+Thank you for your interest in contributing to `github-platform-operator`.
 
 The project aims to remain small, simple, and easy to use. Contributions should preserve that focus.
 
@@ -15,8 +15,8 @@ The project aims to remain small, simple, and easy to use. Contributions should 
 Clone the repository:
 
 ```bash
-git clone https://github.com/pierinho13/kubectl-peek.git
-cd kubectl-peek
+git clone https://github.com/pierinho13/github-platform-operator.git
+cd github-platform-operator
 ```
 
 Download dependencies:
@@ -34,13 +34,13 @@ go test ./...
 Build the project:
 
 ```bash
-go build -o kubectl-peek .
+go build -o github-platform-operator .
 ```
 
 Run it locally:
 
 ```bash
-./kubectl-peek
+./github-platform-operator
 ```
 
 ## Code quality
@@ -105,7 +105,7 @@ A pull request should:
 
 Use the bug report template and include:
 
-- `kubectl-peek` version
+- `github-platform-operator` version
 - operating system
 - Kubernetes version
 - relevant command
@@ -123,7 +123,7 @@ Please describe:
 
 - the problem you are trying to solve
 - the expected behavior
-- why it fits the scope of `kubectl-peek`
+- why it fits the scope of `github-platform-operator`
 
 ## Security issues
 
