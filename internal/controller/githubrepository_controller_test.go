@@ -49,6 +49,12 @@ type fakeRepositoryClientFactory struct {
 	factoryError error
 }
 
+func repositoryVisibilityPtr(
+	visibility githubv1alpha1.RepositoryVisibility,
+) *githubv1alpha1.RepositoryVisibility {
+	return &visibility
+}
+
 func newFakeRepositoryClient() *fakeRepositoryClient {
 	return &fakeRepositoryClient{
 		repositories: make(map[string]*githubclient.Repository),
@@ -189,7 +195,10 @@ var _ = Describe("GitHubRepository Controller", func() {
 				Spec: githubv1alpha1.GitHubRepositorySpec{
 					ProviderConfigRef: providerName,
 					Name:              resourceName,
-					Visibility:        githubv1alpha1.RepositoryVisibilityPrivate,
+					Visibility: repositoryVisibilityPtr(
+						githubv1alpha1.RepositoryVisibilityPrivate,
+					),
+					DeletionPolicy: githubv1alpha1.RepositoryDeletionPolicyDelete,
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
@@ -226,7 +235,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			}
 		})
 
-		It("should create, update and delete the GitHub repository", func() {
+		It("should create, update and delete the GitHub repository with Delete policy", func() {
 			fakeGitHubClient := newFakeRepositoryClient()
 			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
 			controllerReconciler := &GitHubRepositoryReconciler{
@@ -267,7 +276,9 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(readyCondition.Reason).To(Equal("RepositoryCreated"))
 
 			By("changing the desired visibility")
-			resource.Spec.Visibility = githubv1alpha1.RepositoryVisibilityPublic
+			resource.Spec.Visibility = repositoryVisibilityPtr(
+				githubv1alpha1.RepositoryVisibilityPublic,
+			)
 			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
 
 			_, err = controllerReconciler.Reconcile(ctx, request)
@@ -286,6 +297,87 @@ var _ = Describe("GitHubRepository Controller", func() {
 				err := k8sClient.Get(ctx, typeNamespacedName, &githubv1alpha1.GitHubRepository{})
 				return apierrors.IsNotFound(err)
 			}).Should(BeTrue())
+		})
+
+		It("should orphan the GitHub repository by default", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Visibility = nil
+			resource.Spec.DeletionPolicy = githubv1alpha1.RepositoryDeletionPolicyOrphan
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			By("adding the finalizer and creating a private remote repository")
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakeGitHubClient.createCalls).To(Equal(1))
+			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Visibility).To(Equal("private"))
+
+			By("removing only the custom resource")
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeGitHubClient.deleteCalls).To(Equal(0))
+			Expect(fakeGitHubClient.repositories).To(HaveKey("k8sready/test-resource"))
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, typeNamespacedName, &githubv1alpha1.GitHubRepository{})
+				return apierrors.IsNotFound(err)
+			}).Should(BeTrue())
+		})
+
+		It("should preserve visibility when adopting an existing repository without visibility", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
+				ID:         42,
+				HTMLURL:    "https://github.com/k8sready/test-resource",
+				Visibility: "public",
+			}
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Visibility = nil
+			resource.Spec.DeletionPolicy = githubv1alpha1.RepositoryDeletionPolicyOrphan
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			By("adding the finalizer and adopting the existing repository")
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeGitHubClient.createCalls).To(Equal(0))
+			Expect(fakeGitHubClient.updateCalls).To(Equal(0))
+			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Visibility).To(Equal("public"))
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(resource.Status.RepositoryID).To(Equal(int64(42)))
+			Expect(resource.Status.Visibility).To(Equal(githubv1alpha1.RepositoryVisibilityPublic))
+
+			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Reason).To(Equal("RepositoryAvailable"))
 		})
 	})
 })

@@ -29,6 +29,9 @@ spec:
     - jsonPath: .status.visibility
       name: Visibility
       type: string
+    - jsonPath: .spec.deletionPolicy
+      name: Deletion Policy
+      type: string
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
@@ -60,6 +63,15 @@ spec:
           spec:
             description: GitHubRepositorySpec defines the desired state of GitHubRepository.
             properties:
+              deletionPolicy:
+                default: Orphan
+                description: |-
+                  DeletionPolicy determines whether deleting the custom resource also deletes
+                  the remote GitHub repository.
+                enum:
+                - Orphan
+                - Delete
+                type: string
               name:
                 description: Name is the name of the GitHub repository.
                 minLength: 1
@@ -84,9 +96,10 @@ spec:
                 - message: providerConfigRef is immutable
                   rule: self == oldSelf
               visibility:
-                default: private
-                description: Visibility determines whether the repository is public
-                  or private.
+                description: |-
+                  Visibility determines whether the operator manages the repository visibility.
+                  When omitted, new repositories are created as private, while existing repositories
+                  keep their current visibility.
                 enum:
                 - public
                 - private

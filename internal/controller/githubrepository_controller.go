@@ -100,12 +100,18 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 		return ctrl.Result{}, err
 	}
 
+	desiredVisibility := "<unmanaged>"
+	if repository.Spec.Visibility != nil {
+		desiredVisibility = string(*repository.Spec.Visibility)
+	}
+
 	logger.Info(
 		"reconciling GitHubRepository",
 		"providerConfig", provider.Name,
 		"organization", provider.Spec.Organization,
 		"repository", repository.Spec.Name,
-		"visibility", repository.Spec.Visibility,
+		"visibility", desiredVisibility,
+		"deletionPolicy", repository.Spec.EffectiveDeletionPolicy(),
 	)
 
 	remoteRepository, action, err := r.reconcileRemoteRepository(
@@ -246,7 +252,7 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 			ctx,
 			organization,
 			repository.Spec.Name,
-			repository.Spec.Visibility == githubv1alpha1.RepositoryVisibilityPrivate,
+			repository.Spec.EffectiveVisibilityForCreation() == githubv1alpha1.RepositoryVisibilityPrivate,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf(
@@ -266,7 +272,16 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 		return remoteRepository, "RepositoryCreated", nil
 	}
 
-	desiredVisibility := string(repository.Spec.Visibility)
+	if repository.Spec.Visibility == nil {
+		logger.Info(
+			"preserving existing GitHub repository visibility",
+			"visibility", remoteRepository.Visibility,
+		)
+
+		return remoteRepository, "RepositoryAvailable", nil
+	}
+
+	desiredVisibility := string(*repository.Spec.Visibility)
 	if remoteRepository.Visibility != desiredVisibility {
 		logger.Info(
 			"updating GitHub repository visibility",
@@ -313,6 +328,17 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 	logger := logf.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(repository, githubRepositoryFinalizer) {
+		return ctrl.Result{}, nil
+	}
+
+	if repository.Spec.EffectiveDeletionPolicy() == githubv1alpha1.RepositoryDeletionPolicyOrphan {
+		logger.Info("orphaning GitHub repository and removing finalizer")
+
+		controllerutil.RemoveFinalizer(repository, githubRepositoryFinalizer)
+		if err := r.Update(ctx, repository); err != nil {
+			return ctrl.Result{}, fmt.Errorf("remove GitHubRepository finalizer: %w", err)
+		}
+
 		return ctrl.Result{}, nil
 	}
 

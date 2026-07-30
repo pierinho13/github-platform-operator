@@ -34,6 +34,19 @@ const (
 	RepositoryVisibilityPrivate RepositoryVisibility = "private"
 )
 
+// RepositoryDeletionPolicy defines what happens to the remote repository when
+// the GitHubRepository custom resource is deleted.
+// +kubebuilder:validation:Enum=Orphan;Delete
+type RepositoryDeletionPolicy string
+
+const (
+	// RepositoryDeletionPolicyOrphan keeps the GitHub repository when the custom resource is deleted.
+	RepositoryDeletionPolicyOrphan RepositoryDeletionPolicy = "Orphan"
+
+	// RepositoryDeletionPolicyDelete permanently deletes the GitHub repository with the custom resource.
+	RepositoryDeletionPolicyDelete RepositoryDeletionPolicy = "Delete"
+)
+
 // GitHubRepositorySpec defines the desired state of GitHubRepository.
 type GitHubRepositorySpec struct {
 	// ProviderConfigRef references the cluster-scoped GitHubProviderConfig.
@@ -53,9 +66,16 @@ type GitHubRepositorySpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="name is immutable"
 	Name string `json:"name"`
 
-	// Visibility determines whether the repository is public or private.
-	// +kubebuilder:default=private
-	Visibility RepositoryVisibility `json:"visibility,omitempty"`
+	// Visibility determines whether the operator manages the repository visibility.
+	// When omitted, new repositories are created as private, while existing repositories
+	// keep their current visibility.
+	// +optional
+	Visibility *RepositoryVisibility `json:"visibility,omitempty"`
+
+	// DeletionPolicy determines whether deleting the custom resource also deletes
+	// the remote GitHub repository.
+	// +kubebuilder:default=Orphan
+	DeletionPolicy RepositoryDeletionPolicy `json:"deletionPolicy,omitempty"`
 }
 
 // EffectiveProviderConfigRef returns the configured provider or the default provider name.
@@ -65,6 +85,25 @@ func (s GitHubRepositorySpec) EffectiveProviderConfigRef() string {
 	}
 
 	return s.ProviderConfigRef
+}
+
+// EffectiveDeletionPolicy returns the configured policy or the safe Orphan default.
+func (s GitHubRepositorySpec) EffectiveDeletionPolicy() RepositoryDeletionPolicy {
+	if s.DeletionPolicy == "" {
+		return RepositoryDeletionPolicyOrphan
+	}
+
+	return s.DeletionPolicy
+}
+
+// EffectiveVisibilityForCreation returns the requested visibility for a new
+// repository. Repositories are created private when visibility is omitted.
+func (s GitHubRepositorySpec) EffectiveVisibilityForCreation() RepositoryVisibility {
+	if s.Visibility == nil {
+		return RepositoryVisibilityPrivate
+	}
+
+	return *s.Visibility
 }
 
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
@@ -107,6 +146,7 @@ type GitHubRepositoryStatus struct {
 // +kubebuilder:printcolumn:name="Organization",type=string,JSONPath=`.status.organization`
 // +kubebuilder:printcolumn:name="Repository",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Visibility",type=string,JSONPath=`.status.visibility`
+// +kubebuilder:printcolumn:name="Deletion Policy",type=string,JSONPath=`.spec.deletionPolicy`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
