@@ -5,8 +5,8 @@
 - Kubernetes 1.30 or newer
 - Helm 3 with OCI registry support
 - `kubectl`
-- a GitHub token with access to the target organization and the resources that
-  the operator will manage
+- either a GitHub token or an installed GitHub App with access to the target
+  organization and the resources that the operator will manage
 
 Use a disposable repository or organization while evaluating destructive
 deletion policies.
@@ -36,6 +36,7 @@ The Helm chart installs these resources:
 ```text
 githubproviderconfigs.github.k8sready.com
 githubrepositories.github.k8sready.com
+githubrepositoryrulesets.github.k8sready.com
 githubrepositoryteamaccesses.github.k8sready.com
 githubrepositorycollaborators.github.k8sready.com
 githubenvironments.github.k8sready.com
@@ -44,6 +45,13 @@ githubactionsvariables.github.k8sready.com
 ```
 
 ## Configure GitHub credentials
+
+A provider must configure exactly one authentication method:
+
+- an existing GitHub token through `credentials.secretRef`
+- a GitHub App installation through `credentials.githubApp`
+
+### Personal access token
 
 Create a Kubernetes Secret containing the GitHub token:
 
@@ -74,6 +82,40 @@ spec:
 kubectl apply -f provider.yaml
 kubectl get ghprovider default
 ```
+
+### GitHub App installation
+
+Create a Secret from the PEM private key downloaded for the GitHub App:
+
+```bash
+kubectl create secret generic github-app-credentials \
+  --namespace github-platform-operator-system \
+  --from-file=private-key.pem=/path/to/github-app.private-key.pem
+```
+
+Create the provider:
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubProviderConfig
+metadata:
+  name: github-app
+spec:
+  organization: k8sready
+  apiURL: https://api.github.com
+  credentials:
+    githubApp:
+      appID: Iv1.REPLACE_ME
+      installationID: 12345678
+      privateKeySecretRef:
+        namespace: github-platform-operator-system
+        name: github-app-credentials
+        key: private-key.pem
+```
+
+`appID` accepts the GitHub App client ID or numeric app ID. The operator creates
+short-lived installation access tokens and refreshes them before expiration.
+PKCS#1 and PKCS#8 RSA private keys are supported.
 
 For GitHub Enterprise Server, set `spec.apiURL` to the REST API base URL, for
 example:
@@ -116,8 +158,57 @@ kubectl get ghrepo example-repository
 kubectl get ghrepo example-repository -o yaml
 ```
 
+## Protect the repository with a ruleset
+
+Create a disabled ruleset first so its payload and status can be inspected
+without enforcing it immediately:
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryRuleset
+metadata:
+  name: example-repository-protect-main
+  namespace: default
+spec:
+  repositoryRef:
+    name: example-repository
+  name: protect-main
+  target: branch
+  enforcement: disabled
+  conditions:
+    refName:
+      include:
+        - "~DEFAULT_BRANCH"
+      exclude: []
+  rules:
+    - type: deletion
+    - type: non_fast_forward
+  deletionPolicy: Orphan
+```
+
+```bash
+kubectl apply -f ruleset.yaml
+kubectl wait \
+  --for=condition=Ready \
+  ghruleset/example-repository-protect-main \
+  --timeout=90s
+kubectl get ghruleset example-repository-protect-main -o yaml
+```
+
+After validating the observed state, activate it:
+
+```bash
+kubectl patch ghruleset example-repository-protect-main \
+  --type merge \
+  -p '{"spec":{"enforcement":"active"}}'
+```
+
+GitHub may return `403` when the repository or organization plan does not
+support rulesets. Testing against a disposable repository is recommended.
+
 ## Next steps
 
+- Review the complete [`GitHubRepositoryRuleset`](resources.md#githubrepositoryruleset) API.
 - Add [team or collaborator access](resources.md#repository-access).
 - Create an [environment](resources.md#githubenvironment).
 - Synchronize [Actions secrets and variables](resources.md#github-actions-secrets-and-variables).
