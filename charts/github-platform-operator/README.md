@@ -73,8 +73,8 @@ helm upgrade --install github-platform-operator \
 
 ## CRDs and upgrades
 
-The packaged chart includes generated CRDs under `crds/`. Helm installs them
-before the controller resources.
+The packaged chart includes generated CRDs under `crds/`, including
+`GitHubRepositoryRuleset`. Helm installs them before the controller resources.
 
 Helm does not upgrade or delete resources under `crds/`. When a release changes
 CRD schemas, apply the target CRDs before running `helm upgrade`:

@@ -6,7 +6,7 @@ List all managed resources:
 
 ```bash
 kubectl get \
-  ghprovider,ghrepo,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
+  ghprovider,ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
   -A
 ```
 
@@ -22,6 +22,9 @@ Common `Ready` condition reasons include:
 RepositoryCreated
 RepositoryUpdated
 RepositoryAvailable
+RulesetCreated
+RulesetUpdated
+RulesetAvailable
 AccessConfigured
 InvitationPending
 EnvironmentCreated
@@ -29,7 +32,9 @@ SecretCreated
 SecretUpdated
 VariableCreated
 VariableUpdated
+ReconciliationSuspended
 DependencyUnavailable
+InvalidDesiredState
 ReconciliationFailed
 ```
 
@@ -48,6 +53,7 @@ The default policy is non-destructive.
 | Resource | Safe default | Destructive option |
 |---|---|---|
 | `GitHubRepository` | `Orphan` | `Delete` |
+| `GitHubRepositoryRuleset` | `Orphan` | `Delete` |
 | `GitHubRepositoryTeamAccess` | `Orphan` | `Revoke` |
 | `GitHubRepositoryCollaborator` | `Orphan` | `Revoke` |
 | `GitHubEnvironment` | `Orphan` | `Delete` |
@@ -56,6 +62,47 @@ The default policy is non-destructive.
 
 Review the manifest before changing a deletion policy. Kubernetes finalizers
 keep the custom resource present until the requested GitHub cleanup succeeds.
+
+## Suspend and resume a provider
+
+Suspend reconciliation before credential maintenance or a planned GitHub
+change:
+
+```bash
+kubectl patch ghprovider default \
+  --type merge \
+  -p '{"spec":{"suspended":true}}'
+```
+
+Resources that use the provider report:
+
+```text
+Ready=False
+Reason=ReconciliationSuspended
+```
+
+No GitHub API requests or credential reads are made while the provider is
+suspended. Remote `Delete` and `Revoke` finalizers wait for the provider to be
+resumed. `Orphan` resources can still be removed because they require no remote
+operation.
+
+Resume reconciliation:
+
+```bash
+kubectl patch ghprovider default \
+  --type merge \
+  -p '{"spec":{"suspended":false}}'
+```
+
+## GitHub API rate limits
+
+All controllers share one reactive rate-limit gate inside the manager process.
+When GitHub returns a primary, secondary or abuse rate-limit response, the
+operator honors `Retry-After` or the GitHub reset time and requeues affected
+resources without producing a continuous error storm.
+
+A normal authorization or feature-plan `403` is not treated as a rate limit.
+Inspect the response message in the resource condition or controller logs.
 
 ## Secret and variable rotation
 
@@ -145,7 +192,7 @@ Before deleting CRDs, inspect all finalizers and remote deletion policies:
 
 ```bash
 kubectl get \
-  ghrepo,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
+  ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
   -A
 ```
 
@@ -174,8 +221,30 @@ kubectl get secret -A
 
 ### GitHub returns `403`
 
-The token does not have enough permission, the organization policy blocks the
-operation, or the selected GitHub plan does not support that feature.
+The token or GitHub App installation may not have enough permission, the
+organization policy may block the operation, or the selected GitHub plan may
+not support that feature.
+
+For rulesets, a response such as the following indicates a GitHub plan
+restriction rather than an operator authentication failure:
+
+```text
+Upgrade to GitHub Pro or make this repository public to enable this feature.
+```
+
+### Ruleset returns `422`
+
+Inspect the condition message and the exact rule parameters. Ref-name conditions
+must contain at least one `include` entry. Empty exclusions are supported and
+are sent as an empty JSON array.
+
+### Provider is suspended
+
+```bash
+kubectl get ghprovider default -o yaml
+```
+
+Set `spec.suspended` back to `false` when remote reconciliation should resume.
 
 ### Collaborator remains pending
 

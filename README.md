@@ -4,18 +4,21 @@
 [![GitHub Release](https://img.shields.io/github/v/release/pierinho13/github-platform-operator?display_name=tag&sort=semver)](https://github.com/pierinho13/github-platform-operator/releases)
 [![License](https://img.shields.io/github/license/pierinho13/github-platform-operator)](LICENSE)
 
-A small Kubernetes operator for declaratively creating, adopting and configuring
-GitHub repositories.
+A Kubernetes operator for declaratively creating, adopting and configuring
+GitHub repositories and their common platform resources.
 
 It intentionally covers the common platform workflow instead of mirroring the
 entire GitHub API:
 
 - repository creation and safe adoption
 - visibility, description, homepage, topics and repository features
+- repository rulesets with branch, tag and push targets
 - team and direct collaborator access
 - GitHub environments
 - Actions secrets and variables for repositories, environments and organizations
-- Kubernetes-style status, drift reconciliation and explicit deletion policies
+- personal access token and GitHub App installation authentication
+- provider suspension, shared rate-limit handling and drift reconciliation
+- Kubernetes-style status and explicit deletion policies
 
 > [!WARNING]
 > The API is currently `v1alpha1`. Backward-incompatible changes may occur before
@@ -58,6 +61,7 @@ metadata:
 spec:
   organization: k8sready
   apiURL: https://api.github.com
+  suspended: false
   credentials:
     secretRef:
       namespace: default
@@ -98,6 +102,36 @@ kubectl get ghprovider
 kubectl get ghrepo -A
 ```
 
+Create a ruleset after the repository is ready:
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryRuleset
+metadata:
+  name: example-repository-protect-main
+  namespace: default
+spec:
+  repositoryRef:
+    name: example-repository
+  name: protect-main
+  target: branch
+  enforcement: disabled
+  conditions:
+    refName:
+      include:
+        - "~DEFAULT_BRANCH"
+      exclude: []
+  rules:
+    - type: deletion
+    - type: non_fast_forward
+  deletionPolicy: Orphan
+```
+
+```bash
+kubectl apply -f ruleset.yaml
+kubectl get ghruleset -A
+```
+
 `Orphan` is the safe default: deleting the Kubernetes resource keeps the remote
 GitHub resource. Destructive remote deletion or access revocation must be
 requested explicitly.
@@ -121,9 +155,8 @@ The project is deliberately smaller than a general-purpose GitHub provider.
 It focuses on making a repository ready for a team to work and deploy without
 trying to expose every GitHub API resource.
 
-Features such as runners, webhooks, branch rulesets, repository files,
-Dependabot secrets and complete organization administration are outside the
-current scope.
+Features such as runners, webhooks, repository files, Dependabot secrets and
+complete organization administration are outside the current scope.
 
 ## License
 

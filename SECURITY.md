@@ -25,7 +25,8 @@ contents or other sensitive data.
 
 The operator needs access to two categories of Kubernetes Secrets:
 
-1. GitHub credentials referenced by `GitHubProviderConfig`.
+1. GitHub tokens or GitHub App private keys referenced by
+   `GitHubProviderConfig`.
 2. Values referenced by `GitHubActionsSecret` and `GitHubActionsVariable`.
 
 The current controller watches Secrets so that Actions values rotate
@@ -47,8 +48,17 @@ Use the minimum GitHub permissions required for the resources being managed.
 Prefer short-lived GitHub App installation tokens when practical. Rotate
 long-lived personal access tokens regularly.
 
-Never place the GitHub token directly in a custom resource or Helm values.
-Reference it through a Kubernetes Secret.
+Never place a GitHub token or GitHub App private key directly in a custom
+resource or Helm values. Reference it through a Kubernetes Secret.
+
+A GitHub App provider exchanges a signed, short-lived JWT for an installation
+access token. Installation tokens are cached only in process memory and
+refreshed before expiration. Rotating the referenced private key changes the
+cache identity and causes a new installation token to be requested.
+
+Limit the GitHub App installation to the required repositories and grant only
+the repository and organization permissions needed by the managed resources.
+Protect the PEM Secret at least as strictly as a long-lived token.
 
 ## Actions secrets and variables
 
@@ -61,6 +71,15 @@ Avoid logging or debugging changes that could print source Secret data.
 `GitHubActionsVariable` also reads from a Kubernetes Secret for a consistent
 API, but the resulting GitHub variable is not confidential. Never use
 `GitHubActionsVariable` for passwords, tokens or private keys.
+
+## Repository rulesets
+
+`GitHubRepositoryRuleset` can enforce merge, push, deletion and history
+restrictions. Restrict who can create or update ruleset resources, especially
+resources using `enforcement: active` or privileged bypass actors.
+
+Rule parameters are schemaless and are sent to GitHub. Review changes to
+`spec.rules[].parameters` as carefully as changes to RBAC or deployment policy.
 
 ## Destructive operations
 

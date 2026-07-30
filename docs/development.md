@@ -29,7 +29,7 @@ Install the CRDs:
 make install
 ```
 
-Create a token Secret and provider using the examples in
+Create a PAT or GitHub App Secret and provider using the examples in
 [`config/samples`](../config/samples).
 
 Run the controller against the active kubeconfig context:
@@ -52,7 +52,9 @@ git diff --check
 ```
 
 Changes to API types or Kubebuilder markers must include regenerated deepcopy
-code, CRDs and RBAC.
+code, CRDs and RBAC. Changes to GitHub request payloads should include contract
+tests that assert the serialized JSON sent by the REST client. Every bug fix
+should add a regression test that fails without the fix.
 
 ## Build and deploy an image
 
@@ -78,7 +80,20 @@ make test-e2e
 ```
 
 The suite builds the manager image, loads it into Kind, installs the CRDs and
-validates the deployed controller and metrics endpoint.
+validates the deployed controller and metrics endpoint. A Kind cluster must
+exist before running the suite. To reuse the cluster from the local workflow:
+
+```bash
+KIND_CLUSTER=github-platform-operator make test-e2e
+```
+
+Alternatively, use the default E2E cluster name:
+
+```bash
+kind create cluster --name kind
+make test-e2e
+kind delete cluster --name kind
+```
 
 ## Validate the Helm chart
 

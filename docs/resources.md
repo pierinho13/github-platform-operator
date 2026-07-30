@@ -17,6 +17,7 @@ namespace.
 |---|---|
 | `GitHubProviderConfig` | `ghprovider` |
 | `GitHubRepository` | `ghrepo` |
+| `GitHubRepositoryRuleset` | `ghruleset` |
 | `GitHubRepositoryTeamAccess` | `ghteamaccess` |
 | `GitHubRepositoryCollaborator` | `ghcollab` |
 | `GitHubEnvironment` | `ghenv` |
@@ -25,7 +26,8 @@ namespace.
 
 ## `GitHubProviderConfig`
 
-Defines a reusable GitHub organization and token reference.
+Defines a reusable GitHub organization and authentication configuration.
+Exactly one of `credentials.secretRef` and `credentials.githubApp` must be set.
 
 ```yaml
 apiVersion: github.k8sready.com/v1alpha1
@@ -42,8 +44,38 @@ spec:
       key: token
 ```
 
-The provider cannot be deleted while it is referenced by managed repositories
-or organization-scoped Actions resources.
+GitHub App authentication uses the following shape:
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubProviderConfig
+metadata:
+  name: github-app
+spec:
+  organization: k8sready
+  apiURL: https://api.github.com
+  credentials:
+    githubApp:
+      appID: Iv1.REPLACE_ME
+      installationID: 12345678
+      privateKeySecretRef:
+        namespace: github-platform-operator-system
+        name: github-app-credentials
+        key: private-key.pem
+```
+
+The private-key Secret must contain a PEM-encoded PKCS#1 or PKCS#8 RSA key.
+Installation tokens are cached in memory and refreshed before expiration.
+
+Set `spec.suspended: true` to stop all remote reconciliation through a provider.
+While suspended, controllers do not read credentials or call GitHub and managed
+resources report `Ready=False` with reason `ReconciliationSuspended`.
+Kubernetes resources and finalizers remain present until the provider is
+resumed, except that resources using an `Orphan` deletion policy can still
+remove their finalizer without remote cleanup.
+
+The provider cannot be deleted while it is referenced by managed repositories,
+repository rulesets or organization-scoped Actions resources.
 
 ## `GitHubRepository`
 
@@ -88,6 +120,116 @@ Repository deletion policies:
 | `Delete` | Delete the GitHub repository |
 
 `Orphan` is the default.
+
+## `GitHubRepositoryRuleset`
+
+Creates, adopts and continuously reconciles a repository-owned GitHub ruleset.
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryRuleset
+metadata:
+  name: payments-api-protect-main
+  namespace: default
+spec:
+  repositoryRef:
+    name: payments-api
+  name: protect-main
+  target: branch
+  enforcement: active
+  bypassActors:
+    - actorType: OrganizationAdmin
+      bypassMode: always
+  conditions:
+    refName:
+      include:
+        - "~DEFAULT_BRANCH"
+      exclude: []
+  rules:
+    - type: deletion
+    - type: non_fast_forward
+    - type: pull_request
+      parameters:
+        required_approving_review_count: 1
+        dismiss_stale_reviews_on_push: true
+        require_code_owner_review: true
+        require_last_push_approval: false
+        required_review_thread_resolution: true
+        allowed_merge_methods:
+          - squash
+  deletionPolicy: Orphan
+```
+
+Supported targets:
+
+```text
+branch
+tag
+push
+```
+
+Supported enforcement modes:
+
+```text
+disabled
+active
+evaluate
+```
+
+Supported rule types:
+
+```text
+creation
+update
+deletion
+required_linear_history
+merge_queue
+required_deployments
+required_signatures
+pull_request
+required_status_checks
+non_fast_forward
+commit_message_pattern
+commit_author_email_pattern
+committer_email_pattern
+branch_name_pattern
+tag_name_pattern
+workflows
+code_scanning
+copilot_code_review
+license_compliance_scanning
+file_path_restriction
+max_file_path_length
+file_extension_restriction
+max_file_size
+```
+
+Rule-specific `parameters` are preserved as schemaless JSON and sent to GitHub.
+Parameterless rules omit `parameters`.
+
+Ruleset management semantics:
+
+- `rules` is the complete desired rule list.
+- Omitted `conditions` are left unmanaged.
+- Omitted `bypassActors` are left unmanaged.
+- `bypassActors: []` removes every managed bypass actor.
+- Empty ref exclusions are sent as `exclude: []`, not `null`.
+- Rule, condition and bypass-actor ordering does not create false drift.
+
+The controller first looks up the ruleset by `status.rulesetID`. If it is not
+available, it adopts a unique repository-owned ruleset with the same name.
+Multiple repository-owned rulesets with the same name cause reconciliation to
+stop rather than selecting one ambiguously.
+
+Ruleset deletion policies:
+
+| Policy | Result |
+|---|---|
+| `Orphan` | Keep the GitHub ruleset |
+| `Delete` | Delete the GitHub ruleset |
+
+`Orphan` is the default. GitHub may reject ruleset operations with `403` when
+the selected repository or organization plan does not support the feature.
 
 ## Repository access
 
