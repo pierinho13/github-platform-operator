@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -230,6 +231,8 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 	repositoryClient githubclient.RepositoryClient,
 ) (*githubclient.Repository, string, error) {
 	logger := logf.FromContext(ctx)
+	created := false
+	updated := false
 
 	remoteRepository, err := repositoryClient.GetRepository(
 		ctx,
@@ -262,63 +265,143 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 				err,
 			)
 		}
+		created = true
 
 		logger.Info(
 			"GitHub repository created",
 			"repositoryID", remoteRepository.ID,
 			"url", remoteRepository.HTMLURL,
 		)
-
-		return remoteRepository, "RepositoryCreated", nil
 	}
 
-	if repository.Spec.Visibility == nil {
-		logger.Info(
-			"preserving existing GitHub repository visibility",
-			"visibility", remoteRepository.Visibility,
-		)
+	settingsUpdate := desiredRepositoryUpdate(repository.Spec, remoteRepository)
+	if !settingsUpdate.Empty() {
+		logger.Info("updating managed GitHub repository settings")
 
-		return remoteRepository, "RepositoryAvailable", nil
-	}
-
-	desiredVisibility := string(*repository.Spec.Visibility)
-	if remoteRepository.Visibility != desiredVisibility {
-		logger.Info(
-			"updating GitHub repository visibility",
-			"currentVisibility", remoteRepository.Visibility,
-			"desiredVisibility", desiredVisibility,
-		)
-
-		remoteRepository, err = repositoryClient.UpdateRepositoryVisibility(
+		remoteRepository, err = repositoryClient.UpdateRepository(
 			ctx,
 			organization,
 			repository.Spec.Name,
-			desiredVisibility,
+			settingsUpdate,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf(
-				"update GitHub repository %s/%s visibility: %w",
+				"update GitHub repository %s/%s settings: %w",
 				organization,
 				repository.Spec.Name,
 				err,
 			)
 		}
-
-		logger.Info(
-			"GitHub repository visibility updated",
-			"visibility", remoteRepository.Visibility,
-		)
-
-		return remoteRepository, "RepositoryUpdated", nil
+		updated = true
 	}
 
-	logger.Info(
-		"GitHub repository already matches the desired state",
-		"repositoryID", remoteRepository.ID,
-		"url", remoteRepository.HTMLURL,
-	)
+	if repository.Spec.Topics != nil {
+		desiredTopics := normalizeRepositoryTopics(*repository.Spec.Topics)
+		if !repositoryTopicsEqual(remoteRepository.Topics, desiredTopics) {
+			logger.Info(
+				"replacing managed GitHub repository topics",
+				"topics", desiredTopics,
+			)
 
-	return remoteRepository, "RepositoryAvailable", nil
+			observedTopics, err := repositoryClient.ReplaceRepositoryTopics(
+				ctx,
+				organization,
+				repository.Spec.Name,
+				desiredTopics,
+			)
+			if err != nil {
+				return nil, "", fmt.Errorf(
+					"replace GitHub repository %s/%s topics: %w",
+					organization,
+					repository.Spec.Name,
+					err,
+				)
+			}
+			remoteRepository.Topics = observedTopics
+			updated = true
+		}
+	}
+
+	switch {
+	case created:
+		return remoteRepository, "RepositoryCreated", nil
+	case updated:
+		return remoteRepository, "RepositoryUpdated", nil
+	default:
+		logger.Info(
+			"GitHub repository already matches the managed desired state",
+			"repositoryID", remoteRepository.ID,
+			"url", remoteRepository.HTMLURL,
+		)
+		return remoteRepository, "RepositoryAvailable", nil
+	}
+}
+
+func desiredRepositoryUpdate(
+	spec githubv1alpha1.GitHubRepositorySpec,
+	remote *githubclient.Repository,
+) githubclient.RepositoryUpdate {
+	var update githubclient.RepositoryUpdate
+
+	if spec.Visibility != nil && remote.Visibility != string(*spec.Visibility) {
+		visibility := string(*spec.Visibility)
+		update.Visibility = &visibility
+	}
+	if spec.Description != nil && remote.Description != *spec.Description {
+		update.Description = spec.Description
+	}
+	if spec.Homepage != nil && remote.Homepage != *spec.Homepage {
+		update.Homepage = spec.Homepage
+	}
+	if spec.Features != nil {
+		if spec.Features.Issues != nil && remote.HasIssues != *spec.Features.Issues {
+			update.HasIssues = spec.Features.Issues
+		}
+		if spec.Features.Projects != nil && remote.HasProjects != *spec.Features.Projects {
+			update.HasProjects = spec.Features.Projects
+		}
+		if spec.Features.Wiki != nil && remote.HasWiki != *spec.Features.Wiki {
+			update.HasWiki = spec.Features.Wiki
+		}
+		if spec.Features.Discussions != nil &&
+			remote.HasDiscussions != *spec.Features.Discussions {
+			update.HasDiscussions = spec.Features.Discussions
+		}
+	}
+
+	return update
+}
+
+func normalizeRepositoryTopics(topics []string) []string {
+	normalized := make([]string, 0, len(topics))
+	seen := make(map[string]struct{}, len(topics))
+	for _, topic := range topics {
+		topic = strings.ToLower(strings.TrimSpace(topic))
+		if topic == "" {
+			continue
+		}
+		if _, ok := seen[topic]; ok {
+			continue
+		}
+		seen[topic] = struct{}{}
+		normalized = append(normalized, topic)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func repositoryTopicsEqual(current, desired []string) bool {
+	current = normalizeRepositoryTopics(current)
+	desired = normalizeRepositoryTopics(desired)
+	if len(current) != len(desired) {
+		return false
+	}
+	for i := range current {
+		if current[i] != desired[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (r *GitHubRepositoryReconciler) reconcileDelete(
@@ -399,6 +482,15 @@ func (r *GitHubRepositoryReconciler) setReadyCondition(
 		repository.Status.RepositoryID = remoteRepository.ID
 		repository.Status.URL = remoteRepository.HTMLURL
 		repository.Status.Visibility = githubv1alpha1.RepositoryVisibility(remoteRepository.Visibility)
+		repository.Status.Description = remoteRepository.Description
+		repository.Status.Homepage = remoteRepository.Homepage
+		repository.Status.Topics = append([]string(nil), remoteRepository.Topics...)
+		repository.Status.Features = &githubv1alpha1.RepositoryFeaturesStatus{
+			Issues:      remoteRepository.HasIssues,
+			Projects:    remoteRepository.HasProjects,
+			Wiki:        remoteRepository.HasWiki,
+			Discussions: remoteRepository.HasDiscussions,
+		}
 	}
 	repository.Status.ObservedGeneration = repository.Generation
 

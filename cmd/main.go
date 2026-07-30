@@ -221,6 +221,26 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepository")
 		os.Exit(1)
 	}
+
+	if err := (&controller.GitHubRepositoryTeamAccessReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryTeamAccess")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubRepositoryCollaboratorReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubclient.RESTClientFactory{},
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryCollaborator")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

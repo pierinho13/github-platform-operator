@@ -1,0 +1,11 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryCollaborator
+metadata:
+  name: example-repository-octocat
+  namespace: default
+spec:
+  repositoryRef:
+    name: example-repository
+  username: octocat
+  permission: push
+  deletionPolicy: Orphan
