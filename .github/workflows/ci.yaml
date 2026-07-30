@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Verify Go modules
+        run: go mod verify
+
+      - name: Generate, validate and test
+        run: make test
+
+      - name: Check generated and formatted files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! git diff --exit-code; then
+            echo
+            echo "Generated or formatted files are not up to date."
+            echo "Run locally:"
+            echo
+            echo "  make generate manifests"
+            echo "  make fmt"
+            exit 1
+          fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: --timeout=5m
+
+  release-snapshot:
+    name: Validate Helm and release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - test
+      - lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Generate CRDs
+        run: make generate manifests
+
+      - name: Validate and package Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ./hack/package-helm-chart.sh \
+            0.0.0-snapshot \
+            v0.0.0-snapshot
+
+      - name: Verify packaged Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          chart="dist/helm/github-platform-operator-0.0.0-snapshot.tgz"
+
+          test -f "${chart}"
+          tar -tzf "${chart}"
+
+      - name: Validate GoReleaser configuration
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: check
+
+      - name: Run GoReleaser snapshot
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: "~> v2"
+          args: release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Publish release
+
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+
+    needs:
+      - test
+      - lint
+      - release-snapshot
+
+    permissions:
+      contents: write
+      packages: write
+      attestations: write
+      id-token: write
+
+    uses: ./.github/workflows/release.yaml
+    secrets: inherit
