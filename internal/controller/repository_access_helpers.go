@@ -20,9 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -41,6 +39,7 @@ func resolveRepositoryAccess(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.RepositoryAccessClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	namespace string,
 	repositoryRef githubv1alpha1.GitHubRepositoryReference,
 ) (*resolvedRepositoryAccess, error) {
@@ -67,43 +66,15 @@ func resolveRepositoryAccess(
 		return nil, fmt.Errorf("get GitHubProviderConfig %q: %w", providerName, err)
 	}
 
-	reader := apiReader
-	if reader == nil {
-		reader = kubeClient
-	}
-
-	secretRef := provider.Spec.Credentials.SecretRef
-	var secret corev1.Secret
-	if err := reader.Get(ctx, types.NamespacedName{
-		Namespace: secretRef.Namespace,
-		Name:      secretRef.Name,
-	}, &secret); err != nil {
-		return nil, fmt.Errorf(
-			"get credentials Secret %s/%s: %w",
-			secretRef.Namespace,
-			secretRef.Name,
-			err,
-		)
-	}
-
-	tokenValue, ok := secret.Data[secretRef.Key]
-	if !ok {
-		return nil, fmt.Errorf(
-			"credentials Secret %s/%s does not contain key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
-
-	token := strings.TrimSpace(string(tokenValue))
-	if token == "" {
-		return nil, fmt.Errorf(
-			"credentials Secret %s/%s contains an empty key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
+	token, err := resolveProviderToken(
+		ctx,
+		kubeClient,
+		apiReader,
+		tokenProvider,
+		&provider,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	apiURL := provider.Spec.APIURL

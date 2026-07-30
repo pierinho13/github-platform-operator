@@ -31,11 +31,11 @@ type RepositoryAccessClientFactory interface {
 }
 
 // NewRepositoryAccessClient creates a REST-backed repository access client.
-func (RESTClientFactory) NewRepositoryAccessClient(
+func (f RESTClientFactory) NewRepositoryAccessClient(
 	token string,
 	baseURL string,
 ) (RepositoryAccessClient, error) {
-	return NewRESTClient(token, baseURL)
+	return NewRESTClientWithHTTPClient(token, baseURL, f.HTTPClient)
 }
 
 // RepositoryAccessClient defines GitHub team and collaborator access operations.

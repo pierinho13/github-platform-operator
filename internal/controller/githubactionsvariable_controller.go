@@ -47,6 +47,7 @@ type GitHubActionsVariableReconciler struct {
 	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	GitHubClientFactory githubclient.ActionsClientFactory
+	GitHubTokenProvider githubclient.TokenProvider
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubactionsvariables,verbs=get;list;watch;create;update;patch;delete
@@ -81,11 +82,12 @@ func (r *GitHubActionsVariableReconciler) Reconcile(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		resource.Namespace,
 		resource.Spec.Target,
 	)
 	if err != nil {
-		return r.fail(ctx, &resource, nil, nil, "DependencyUnavailable", err)
+		return r.fail(ctx, &resource, nil, nil, dependencyFailureReason(err), err)
 	}
 	reader := r.APIReader
 	if reader == nil {
@@ -193,14 +195,21 @@ func (r *GitHubActionsVariableReconciler) reconcileDelete(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		resource.Namespace,
 		resource.Spec.Target,
 	)
 	if err != nil {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("resolve GitHubActionsVariable deletion target: %w", err)
 	}
 	err = resolved.Client.DeleteActionsVariable(ctx, resolved.Target, resource.Spec.Name)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("delete GitHub Actions variable %q: %w", resource.Spec.Name, err)
 	}
 	return ctrl.Result{}, r.removeFinalizer(ctx, resource)
@@ -236,6 +245,9 @@ func (r *GitHubActionsVariableReconciler) fail(
 		reconcileErr.Error(),
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("%w; update status: %v", reconcileErr, err)
+	}
+	if result, ok := githubDeferredResult(reconcileErr); ok {
+		return result, nil
 	}
 	return ctrl.Result{}, reconcileErr
 }

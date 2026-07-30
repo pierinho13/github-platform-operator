@@ -19,19 +19,15 @@ package controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
-	corev1 "k8s.io/api/core/v1"
 
 	githubv1alpha1 "github.com/pierinho13/github-platform-operator/api/v1alpha1"
 )
@@ -51,7 +47,7 @@ type GitHubProviderConfigReconciler struct {
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubproviderconfigs/finalizers,verbs=update
-// +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories;githubactionssecrets;githubactionsvariables,verbs=get;list;watch
+// +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories;githubactionssecrets;githubactionsvariables;githubrepositoryrulesets,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get
 
 // Reconcile validates the referenced Secret and prevents deleting providers that are still in use.
@@ -77,6 +73,20 @@ func (r *GitHubProviderConfigReconciler) Reconcile(
 		return ctrl.Result{}, nil
 	}
 
+	if provider.Spec.Suspended {
+		if err := r.setProviderReadyCondition(
+			ctx,
+			&provider,
+			metav1.ConditionFalse,
+			"ReconciliationSuspended",
+			"GitHub reconciliation is suspended for this provider",
+		); err != nil {
+			return ctrl.Result{}, fmt.Errorf("update suspended GitHubProviderConfig status: %w", err)
+		}
+
+		return ctrl.Result{RequeueAfter: providerRequeueInterval}, nil
+	}
+
 	if err := r.validateCredentials(ctx, &provider); err != nil {
 		if statusErr := r.setProviderReadyCondition(
 			ctx,
@@ -96,7 +106,7 @@ func (r *GitHubProviderConfigReconciler) Reconcile(
 		&provider,
 		metav1.ConditionTrue,
 		"CredentialsAvailable",
-		"GitHub credentials Secret is available",
+		"GitHub credentials are available",
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubProviderConfig status: %w", err)
 	}
@@ -113,39 +123,29 @@ func (r *GitHubProviderConfigReconciler) validateCredentials(
 		reader = r.Client
 	}
 
-	secretRef := provider.Spec.Credentials.SecretRef
-	var secret corev1.Secret
-	if err := reader.Get(ctx, types.NamespacedName{
-		Namespace: secretRef.Namespace,
-		Name:      secretRef.Name,
-	}, &secret); err != nil {
+	credentials := provider.Spec.Credentials
+	switch {
+	case credentials.SecretRef != nil && credentials.GitHubApp == nil:
+		_, err := readSecretValue(ctx, reader, *credentials.SecretRef)
+		return err
+	case credentials.SecretRef == nil && credentials.GitHubApp != nil:
+		if credentials.GitHubApp.AppID == "" {
+			return fmt.Errorf("GitHub App ID must not be empty")
+		}
+		if credentials.GitHubApp.InstallationID <= 0 {
+			return fmt.Errorf("GitHub App installation ID must be greater than zero")
+		}
+		_, err := readSecretValueBytes(
+			ctx,
+			reader,
+			credentials.GitHubApp.PrivateKeySecretRef,
+		)
+		return err
+	default:
 		return fmt.Errorf(
-			"get credentials Secret %s/%s: %w",
-			secretRef.Namespace,
-			secretRef.Name,
-			err,
+			"exactly one of credentials.secretRef or credentials.githubApp must be configured",
 		)
 	}
-
-	token, ok := secret.Data[secretRef.Key]
-	if !ok {
-		return fmt.Errorf(
-			"credentials Secret %s/%s does not contain key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
-	if strings.TrimSpace(string(token)) == "" {
-		return fmt.Errorf(
-			"credentials Secret %s/%s contains an empty key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
-
-	return nil
 }
 
 func (r *GitHubProviderConfigReconciler) reconcileDelete(
@@ -180,6 +180,33 @@ func (r *GitHubProviderConfigReconciler) reconcileDelete(
 			}
 
 			return ctrl.Result{RequeueAfter: providerRequeueInterval}, nil
+		}
+	}
+
+	var rulesets githubv1alpha1.GitHubRepositoryRulesetList
+	if err := r.List(ctx, &rulesets); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubRepositoryRulesets: %w", err)
+	}
+	for i := range rulesets.Items {
+		resource := &rulesets.Items[i]
+		var repository githubv1alpha1.GitHubRepository
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: resource.Namespace,
+			Name:      resource.Spec.RepositoryRef.Name,
+		}, &repository); err != nil {
+			return ctrl.Result{}, fmt.Errorf(
+				"get GitHubRepository referenced by GitHubRepositoryRuleset %s/%s: %w",
+				resource.Namespace,
+				resource.Name,
+				err,
+			)
+		}
+		if repository.Spec.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubRepositoryRuleset %s/%s", resource.Namespace, resource.Name),
+			)
 		}
 	}
 

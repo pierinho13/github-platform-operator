@@ -203,6 +203,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	githubHTTPClient := githubclient.NewRateLimitedHTTPClient()
+	githubClientFactory := &githubclient.RESTClientFactory{
+		HTTPClient: githubHTTPClient,
+	}
+	githubTokenProvider := githubclient.NewCachedTokenProvider(githubHTTPClient)
+
 	if err := (&controller.GitHubProviderConfigReconciler{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
@@ -216,9 +222,21 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepository")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubRepositoryRulesetReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryRuleset")
 		os.Exit(1)
 	}
 
@@ -226,7 +244,8 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryTeamAccess")
 		os.Exit(1)
@@ -236,7 +255,8 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryCollaborator")
 		os.Exit(1)
@@ -246,7 +266,8 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubEnvironment")
 		os.Exit(1)
@@ -256,7 +277,8 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsSecret")
 		os.Exit(1)
@@ -266,7 +288,8 @@ func main() {
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),
 		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubclient.RESTClientFactory{},
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsVariable")
 		os.Exit(1)

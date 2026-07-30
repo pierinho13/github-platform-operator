@@ -46,6 +46,7 @@ type GitHubEnvironmentReconciler struct {
 	APIReader           client.Reader
 	Scheme              *runtime.Scheme
 	GitHubClientFactory githubclient.ActionsClientFactory
+	GitHubTokenProvider githubclient.TokenProvider
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubenvironments,verbs=get;list;watch;create;update;patch;delete
@@ -81,12 +82,13 @@ func (r *GitHubEnvironmentReconciler) Reconcile(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		environment.Namespace,
 		environment.Spec.RepositoryRef,
 		true,
 	)
 	if err != nil {
-		return r.fail(ctx, &environment, nil, "DependencyUnavailable", err)
+		return r.fail(ctx, &environment, nil, dependencyFailureReason(err), err)
 	}
 
 	remote, err := resolved.Client.GetEnvironment(
@@ -173,11 +175,15 @@ func (r *GitHubEnvironmentReconciler) reconcileDelete(
 		r.Client,
 		r.APIReader,
 		r.GitHubClientFactory,
+		r.GitHubTokenProvider,
 		environment.Namespace,
 		environment.Spec.RepositoryRef,
 		false,
 	)
 	if err != nil {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("resolve environment dependencies for deletion: %w", err)
 	}
 	err = resolved.Client.DeleteEnvironment(
@@ -187,6 +193,9 @@ func (r *GitHubEnvironmentReconciler) reconcileDelete(
 		environment.Spec.Name,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if result, ok := githubDeferredResult(err); ok {
+			return result, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("delete GitHub environment %q: %w", environment.Spec.Name, err)
 	}
 	return ctrl.Result{}, r.removeFinalizer(ctx, environment)
@@ -248,6 +257,9 @@ func (r *GitHubEnvironmentReconciler) fail(
 		reconcileErr.Error(),
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("%w; update status: %v", reconcileErr, err)
+	}
+	if result, ok := githubDeferredResult(reconcileErr); ok {
+		return result, nil
 	}
 	return ctrl.Result{}, reconcileErr
 }

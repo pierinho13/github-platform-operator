@@ -233,7 +233,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 					Organization: testOrganization,
 					APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 					Credentials: githubv1alpha1.GitHubProviderCredentials{
-						SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
+						SecretRef: &githubv1alpha1.NamespacedSecretKeyReference{
 							Namespace: testDefaultName,
 							Name:      secretName,
 							Key:       testTokenKey,
@@ -527,5 +527,39 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Reason).To(Equal("RepositoryAvailable"))
 		})
+
+		It("should stop remote reconciliation while the provider is suspended", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			provider := &githubv1alpha1.GitHubProviderConfig{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: providerName}, provider)).To(Succeed())
+			provider.Spec.Suspended = true
+			Expect(k8sClient.Update(ctx, provider)).To(Succeed())
+
+			result, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(requeueInterval))
+			Expect(fakeFactory.calls).To(Equal(0))
+			Expect(fakeGitHubClient.createCalls).To(Equal(0))
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			condition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal("ReconciliationSuspended"))
+		})
+
 	})
 })

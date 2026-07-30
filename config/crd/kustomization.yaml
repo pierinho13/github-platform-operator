@@ -9,6 +9,7 @@ resources:
 - bases/github.k8sready.com_githubenvironments.yaml
 - bases/github.k8sready.com_githubactionssecrets.yaml
 - bases/github.k8sready.com_githubactionsvariables.yaml
+- bases/github.k8sready.com_githubrepositoryrulesets.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 apiVersion: kustomize.config.k8s.io/v1beta1

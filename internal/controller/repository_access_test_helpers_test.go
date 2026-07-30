@@ -223,7 +223,7 @@ func createRepositoryAccessDependencies(
 			Organization: testOrganization,
 			APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 			Credentials: githubv1alpha1.GitHubProviderCredentials{
-				SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
+				SecretRef: &githubv1alpha1.NamespacedSecretKeyReference{
 					Namespace: testDefaultName,
 					Name:      secretName,
 					Key:       testTokenKey,

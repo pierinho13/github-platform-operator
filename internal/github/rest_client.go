@@ -57,8 +57,19 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("GitHub API returned status %d: %s", e.StatusCode, e.Body)
 }
 
-// NewRESTClient creates a GitHub REST API client.
+// NewRESTClient creates a GitHub REST API client with its own reactive
+// rate-limit transport. Production controllers should share one HTTP client
+// through RESTClientFactory so all controllers observe the same backoff.
 func NewRESTClient(token, baseURL string) (*RESTClient, error) {
+	return NewRESTClientWithHTTPClient(token, baseURL, nil)
+}
+
+// NewRESTClientWithHTTPClient creates a client using the supplied HTTP client.
+func NewRESTClientWithHTTPClient(
+	token string,
+	baseURL string,
+	httpClient *http.Client,
+) (*RESTClient, error) {
 	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, errors.New("GitHub token must not be empty")
@@ -76,12 +87,14 @@ func NewRESTClient(token, baseURL string) (*RESTClient, error) {
 		return nil, fmt.Errorf("GitHub API URL must include a host")
 	}
 
+	if httpClient == nil {
+		httpClient = NewRateLimitedHTTPClient()
+	}
+
 	return &RESTClient{
-		token:   token,
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: defaultRequestTimeout,
-		},
+		token:      token,
+		baseURL:    baseURL,
+		httpClient: httpClient,
 	}, nil
 }
 
@@ -537,7 +550,7 @@ func (c *RESTClient) doWithAccept(
 
 	request.Header.Set("Accept", accept)
 	request.Header.Set("Authorization", "Bearer "+c.token)
-	request.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	request.Header.Set("X-GitHub-Api-Version", githubAPIVersion)
 	request.Header.Set("User-Agent", "github-platform-operator")
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")

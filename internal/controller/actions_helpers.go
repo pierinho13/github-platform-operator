@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,11 +51,12 @@ func resolveActionsTarget(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.ActionsClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	namespace string,
 	target githubv1alpha1.GitHubActionsTarget,
 ) (*resolvedActionsTarget, error) {
 	return resolveActionsTargetWithValidation(
-		ctx, kubeClient, apiReader, factory, namespace, target, true,
+		ctx, kubeClient, apiReader, factory, tokenProvider, namespace, target, true,
 	)
 }
 
@@ -65,11 +65,12 @@ func resolveActionsTargetForDeletion(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.ActionsClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	namespace string,
 	target githubv1alpha1.GitHubActionsTarget,
 ) (*resolvedActionsTarget, error) {
 	return resolveActionsTargetWithValidation(
-		ctx, kubeClient, apiReader, factory, namespace, target, false,
+		ctx, kubeClient, apiReader, factory, tokenProvider, namespace, target, false,
 	)
 }
 
@@ -78,6 +79,7 @@ func resolveActionsTargetWithValidation(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.ActionsClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	namespace string,
 	target githubv1alpha1.GitHubActionsTarget,
 	verifyRemote bool,
@@ -89,7 +91,7 @@ func resolveActionsTargetWithValidation(
 	switch target.Scope() {
 	case githubv1alpha1.ActionsTargetScopeRepository:
 		return resolveRepositoryActionsTarget(
-			ctx, kubeClient, apiReader, factory, namespace, *target.RepositoryRef, verifyRemote,
+			ctx, kubeClient, apiReader, factory, tokenProvider, namespace, *target.RepositoryRef, verifyRemote,
 		)
 	case githubv1alpha1.ActionsTargetScopeEnvironment:
 		var environment githubv1alpha1.GitHubEnvironment
@@ -110,6 +112,7 @@ func resolveActionsTargetWithValidation(
 			kubeClient,
 			apiReader,
 			factory,
+			tokenProvider,
 			namespace,
 			environment.Spec.RepositoryRef,
 			verifyRemote,
@@ -144,7 +147,7 @@ func resolveActionsTargetWithValidation(
 		organizationTarget := target.Organization
 		providerName := organizationTarget.EffectiveProviderConfigRef()
 		provider, actionsClient, err := resolveActionsProvider(
-			ctx, kubeClient, apiReader, factory, providerName,
+			ctx, kubeClient, apiReader, factory, tokenProvider, providerName,
 		)
 		if err != nil {
 			return nil, err
@@ -218,6 +221,7 @@ func resolveRepositoryActionsTarget(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.ActionsClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	namespace string,
 	repositoryRef githubv1alpha1.GitHubRepositoryReference,
 	verifyRemote bool,
@@ -240,6 +244,7 @@ func resolveRepositoryActionsTarget(
 		kubeClient,
 		apiReader,
 		factory,
+		tokenProvider,
 		repository.Spec.EffectiveProviderConfigRef(),
 	)
 	if err != nil {
@@ -285,6 +290,7 @@ func resolveActionsProvider(
 	kubeClient client.Client,
 	apiReader client.Reader,
 	factory githubclient.ActionsClientFactory,
+	tokenProvider githubclient.TokenProvider,
 	providerName string,
 ) (*githubv1alpha1.GitHubProviderConfig, githubclient.ActionsClient, error) {
 	var provider githubv1alpha1.GitHubProviderConfig
@@ -292,41 +298,17 @@ func resolveActionsProvider(
 		return nil, nil, fmt.Errorf("get GitHubProviderConfig %q: %w", providerName, err)
 	}
 
-	reader := apiReader
-	if reader == nil {
-		reader = kubeClient
+	token, err := resolveProviderToken(
+		ctx,
+		kubeClient,
+		apiReader,
+		tokenProvider,
+		&provider,
+	)
+	if err != nil {
+		return nil, nil, err
 	}
-	secretRef := provider.Spec.Credentials.SecretRef
-	var secret corev1.Secret
-	if err := reader.Get(ctx, types.NamespacedName{
-		Namespace: secretRef.Namespace,
-		Name:      secretRef.Name,
-	}, &secret); err != nil {
-		return nil, nil, fmt.Errorf(
-			"get credentials Secret %s/%s: %w",
-			secretRef.Namespace,
-			secretRef.Name,
-			err,
-		)
-	}
-	tokenValue, ok := secret.Data[secretRef.Key]
-	if !ok {
-		return nil, nil, fmt.Errorf(
-			"credentials Secret %s/%s does not contain key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
-	token := strings.TrimSpace(string(tokenValue))
-	if token == "" {
-		return nil, nil, fmt.Errorf(
-			"credentials Secret %s/%s contains an empty key %q",
-			secretRef.Namespace,
-			secretRef.Name,
-			secretRef.Key,
-		)
-	}
+
 	apiURL := provider.Spec.APIURL
 	if apiURL == "" {
 		apiURL = githubv1alpha1.DefaultGitHubAPIURL

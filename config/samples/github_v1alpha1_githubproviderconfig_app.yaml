@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: github-app-credentials
+  namespace: github-platform-operator-system
+type: Opaque
+stringData:
+  private-key.pem: |
+    -----BEGIN RSA PRIVATE KEY-----
+    REPLACE_WITH_THE_GITHUB_APP_PRIVATE_KEY
+    -----END RSA PRIVATE KEY-----
+---
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubProviderConfig
+metadata:
+  name: github-app
+spec:
+  organization: Intime-Comunicacion
+  apiURL: https://api.github.com
+  suspended: false
+  credentials:
+    githubApp:
+      # A GitHub App client ID (recommended) or numeric app ID.
+      appID: Iv1.REPLACE_ME
+      installationID: 12345678
+      privateKeySecretRef:
+        namespace: github-platform-operator-system
+        name: github-app-credentials
+        key: private-key.pem

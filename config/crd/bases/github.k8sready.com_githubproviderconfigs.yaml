@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.apiURL
       name: API URL
       type: string
+    - jsonPath: .spec.suspended
+      name: Suspended
+      type: boolean
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
@@ -64,14 +67,61 @@ spec:
                 - message: apiURL is immutable
                   rule: self == oldSelf
               credentials:
-                description: Credentials defines where the GitHub token is stored.
+                description: Credentials defines how the provider authenticates to
+                  GitHub.
                 properties:
+                  githubApp:
+                    description: GitHubApp configures short-lived installation access
+                      tokens.
+                    properties:
+                      appID:
+                        description: |-
+                          AppID is the GitHub App client ID or numeric app ID used as the JWT issuer.
+                          GitHub recommends using the client ID.
+                        minLength: 1
+                        type: string
+                      installationID:
+                        description: InstallationID is the GitHub App installation
+                          ID.
+                        format: int64
+                        minimum: 1
+                        type: integer
+                      privateKeySecretRef:
+                        description: PrivateKeySecretRef references the PEM-encoded
+                          GitHub App private key.
+                        properties:
+                          key:
+                            description: Key is the key containing the GitHub token
+                              or GitHub App private key.
+                            minLength: 1
+                            type: string
+                          name:
+                            description: Name is the name of the Secret.
+                            minLength: 1
+                            type: string
+                          namespace:
+                            description: Namespace is the namespace containing the
+                              Secret.
+                            minLength: 1
+                            type: string
+                        required:
+                        - key
+                        - name
+                        - namespace
+                        type: object
+                    required:
+                    - appID
+                    - installationID
+                    - privateKeySecretRef
+                    type: object
                   secretRef:
-                    description: SecretRef references the Secret containing the GitHub
-                      token.
+                    description: |-
+                      SecretRef references a Secret containing a personal access token or
+                      another already-issued GitHub token.
                     properties:
                       key:
-                        description: Key is the key containing the GitHub token.
+                        description: Key is the key containing the GitHub token or
+                          GitHub App private key.
                         minLength: 1
                         type: string
                       name:
@@ -87,9 +137,10 @@ spec:
                     - name
                     - namespace
                     type: object
-                required:
-                - secretRef
                 type: object
+                x-kubernetes-validations:
+                - message: exactly one of secretRef or githubApp must be configured
+                  rule: has(self.secretRef) != has(self.githubApp)
               organization:
                 description: Organization is the GitHub organization managed through
                   this provider.
@@ -98,6 +149,13 @@ spec:
                 x-kubernetes-validations:
                 - message: organization is immutable
                   rule: self == oldSelf
+              suspended:
+                default: false
+                description: |-
+                  Suspended stops all remote reconciliation through this provider.
+                  Kubernetes resources and finalizers are retained, and no GitHub API
+                  requests are made until the provider is resumed.
+                type: boolean
             required:
             - credentials
             - organization
