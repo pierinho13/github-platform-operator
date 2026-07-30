@@ -1,0 +1,17 @@
+GitHub Platform Operator has been installed.
+
+Controller namespace:
+  {{ .Release.Namespace }}
+
+Image:
+  {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+
+Check the controller:
+  kubectl get deployment -n {{ .Release.Namespace }} {{ include "github-platform-operator.fullname" . }}
+  kubectl get pods -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+The chart installs the GitHub Platform Operator CRDs before the controller.
+
+Create the GitHub token Secret and a GitHubProviderConfig before creating
+GitHubRepository resources. Examples are available in the project repository:
+  https://github.com/pierinho13/github-platform-operator/tree/main/config/samples

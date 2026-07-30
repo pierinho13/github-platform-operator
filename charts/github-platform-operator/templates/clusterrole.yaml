@@ -1,0 +1,61 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "github-platform-operator.managerRoleName" . }}
+  labels:
+    {{- include "github-platform-operator.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubactionssecrets
+      - githubactionsvariables
+      - githubenvironments
+      - githubproviderconfigs
+      - githubrepositories
+      - githubrepositorycollaborators
+      - githubrepositoryteamaccesses
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubactionssecrets/finalizers
+      - githubactionsvariables/finalizers
+      - githubenvironments/finalizers
+      - githubproviderconfigs/finalizers
+      - githubrepositories/finalizers
+      - githubrepositorycollaborators/finalizers
+      - githubrepositoryteamaccesses/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubactionssecrets/status
+      - githubactionsvariables/status
+      - githubenvironments/status
+      - githubproviderconfigs/status
+      - githubrepositories/status
+      - githubrepositorycollaborators/status
+      - githubrepositoryteamaccesses/status
+    verbs:
+      - get
+      - patch
+      - update
+{{- end }}

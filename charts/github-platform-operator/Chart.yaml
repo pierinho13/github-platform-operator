@@ -1,0 +1,21 @@
+apiVersion: v2
+name: github-platform-operator
+description: Kubernetes operator for managing GitHub repositories, access and Actions configuration
+type: application
+version: 0.1.0
+appVersion: "v0.1.0"
+home: https://github.com/pierinho13/github-platform-operator
+sources:
+  - https://github.com/pierinho13/github-platform-operator
+maintainers:
+  - name: pierinho13
+    url: https://github.com/pierinho13
+keywords:
+  - github
+  - github-actions
+  - kubernetes
+  - operator
+  - platform-engineering
+annotations:
+  artifacthub.io/category: integration-delivery
+  artifacthub.io/license: Apache-2.0
