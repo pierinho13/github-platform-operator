@@ -32,6 +32,12 @@ import (
 const (
 	defaultRequestTimeout = 30 * time.Second
 	maxResponseBodySize   = 1 << 20
+
+	actionsVisibilitySelected = "selected"
+	repositoryPermissionPull  = "pull"
+	repositoryPermissionPush  = "push"
+	repositoryInvitationRead  = "read"
+	repositoryInvitationWrite = "write"
 )
 
 // RESTClient is a minimal GitHub REST API client.
@@ -772,20 +778,20 @@ func permissionFromGitHubFields(
 	case maintain:
 		return "maintain", nil
 	case push:
-		return "push", nil
+		return repositoryPermissionPush, nil
 	case triage:
 		return "triage", nil
 	case pull:
-		return "pull", nil
+		return repositoryPermissionPull, nil
 	}
 
 	switch roleName {
-	case "admin", "maintain", "triage", "push", "pull":
+	case "admin", "maintain", "triage", repositoryPermissionPush, repositoryPermissionPull:
 		return roleName, nil
-	case "write":
-		return "push", nil
-	case "read":
-		return "pull", nil
+	case repositoryInvitationWrite:
+		return repositoryPermissionPush, nil
+	case repositoryInvitationRead:
+		return repositoryPermissionPull, nil
 	default:
 		return "", fmt.Errorf("GitHub response did not contain a supported repository permission")
 	}
@@ -810,10 +816,10 @@ func decodeRepositoryInvitation(body io.Reader) (*CollaboratorAccess, error) {
 
 func collaboratorPermissionToInvitationPermission(permission string) string {
 	switch permission {
-	case "pull":
-		return "read"
-	case "push":
-		return "write"
+	case repositoryPermissionPull:
+		return repositoryInvitationRead
+	case repositoryPermissionPush:
+		return repositoryInvitationWrite
 	default:
 		return permission
 	}
@@ -821,10 +827,10 @@ func collaboratorPermissionToInvitationPermission(permission string) string {
 
 func invitationPermissionToCollaboratorPermission(permission string) string {
 	switch permission {
-	case "read":
-		return "pull"
-	case "write":
-		return "push"
+	case repositoryInvitationRead:
+		return repositoryPermissionPull
+	case repositoryInvitationWrite:
+		return repositoryPermissionPush
 	default:
 		return permission
 	}

@@ -159,7 +159,7 @@ func (c *RESTClient) GetActionsSecret(
 	if err != nil {
 		return nil, err
 	}
-	if target.Scope == ActionsTargetScopeOrganization && secret.Visibility == "selected" {
+	if target.Scope == ActionsTargetScopeOrganization && secret.Visibility == actionsVisibilitySelected {
 		secret.SelectedRepositoryIDs, err = c.getSelectedRepositoryIDs(ctx, endpoint+"/repositories")
 		if err != nil {
 			return nil, err
@@ -250,7 +250,7 @@ func (c *RESTClient) GetActionsVariable(
 	if err != nil {
 		return nil, err
 	}
-	if target.Scope == ActionsTargetScopeOrganization && variable.Visibility == "selected" {
+	if target.Scope == ActionsTargetScopeOrganization && variable.Visibility == actionsVisibilitySelected {
 		variable.SelectedRepositoryIDs, err = c.getSelectedRepositoryIDs(ctx, endpoint+"/repositories")
 		if err != nil {
 			return nil, err
