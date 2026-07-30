@@ -212,21 +212,21 @@ func createRepositoryAccessDependencies(
 	repositoryName string,
 ) {
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
-		Data:       map[string][]byte{"token": []byte("test-token")},
+		ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: testDefaultName},
+		Data:       map[string][]byte{testTokenKey: []byte("test-token")},
 	}
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 	provider := &githubv1alpha1.GitHubProviderConfig{
 		ObjectMeta: metav1.ObjectMeta{Name: providerName},
 		Spec: githubv1alpha1.GitHubProviderConfigSpec{
-			Organization: "k8sready",
+			Organization: testOrganization,
 			APIURL:       githubv1alpha1.DefaultGitHubAPIURL,
 			Credentials: githubv1alpha1.GitHubProviderCredentials{
 				SecretRef: githubv1alpha1.NamespacedSecretKeyReference{
-					Namespace: "default",
+					Namespace: testDefaultName,
 					Name:      secretName,
-					Key:       "token",
+					Key:       testTokenKey,
 				},
 			},
 		},
@@ -236,7 +236,7 @@ func createRepositoryAccessDependencies(
 	repository := &githubv1alpha1.GitHubRepository{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      repositoryResourceName,
-			Namespace: "default",
+			Namespace: testDefaultName,
 		},
 		Spec: githubv1alpha1.GitHubRepositorySpec{
 			ProviderConfigRef: providerName,
@@ -253,7 +253,7 @@ func cleanupRepositoryAccessDependencies(
 	repositoryResourceName string,
 ) {
 	repository := &githubv1alpha1.GitHubRepository{}
-	repositoryKey := types.NamespacedName{Name: repositoryResourceName, Namespace: "default"}
+	repositoryKey := types.NamespacedName{Name: repositoryResourceName, Namespace: testDefaultName}
 	if err := k8sClient.Get(ctx, repositoryKey, repository); err == nil {
 		if controllerutil.ContainsFinalizer(repository, githubRepositoryFinalizer) {
 			controllerutil.RemoveFinalizer(repository, githubRepositoryFinalizer)
@@ -274,7 +274,7 @@ func cleanupRepositoryAccessDependencies(
 	}
 
 	secret := &corev1.Secret{}
-	secretKey := types.NamespacedName{Name: secretName, Namespace: "default"}
+	secretKey := types.NamespacedName{Name: secretName, Namespace: testDefaultName}
 	if err := k8sClient.Get(ctx, secretKey, secret); err == nil {
 		Expect(k8sClient.Delete(ctx, secret)).To(Succeed())
 	}

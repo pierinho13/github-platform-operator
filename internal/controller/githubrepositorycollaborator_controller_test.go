@@ -42,7 +42,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 	)
 
 	ctx := context.Background()
-	collaboratorKey := types.NamespacedName{Name: collaboratorName, Namespace: "default"}
+	collaboratorKey := types.NamespacedName{Name: collaboratorName, Namespace: testDefaultName}
 
 	BeforeEach(func() {
 		createRepositoryAccessDependencies(
@@ -54,7 +54,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 		)
 
 		collaborator := &githubv1alpha1.GitHubRepositoryCollaborator{
-			ObjectMeta: metav1.ObjectMeta{Name: collaboratorName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: collaboratorName, Namespace: testDefaultName},
 			Spec: githubv1alpha1.GitHubRepositoryCollaboratorSpec{
 				RepositoryRef: githubv1alpha1.GitHubRepositoryReference{
 					Name: repositoryResourceName,
@@ -90,7 +90,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 	It("should configure, update and revoke direct collaborator access", func() {
 		fakeClient := newFakeRepositoryAccessClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 20, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 20, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeRepositoryAccessClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryCollaboratorReconciler{
@@ -112,7 +112,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 		Expect(k8sClient.Get(ctx, collaboratorKey, collaborator)).To(Succeed())
 		Expect(collaborator.Status.Permission).To(Equal(githubv1alpha1.RepositoryPermissionPush))
 		Expect(collaborator.Status.InvitationPending).To(BeFalse())
-		condition := meta.FindStatusCondition(collaborator.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(collaborator.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("AccessConfigured"))
@@ -135,7 +135,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 	It("should report and revoke a pending invitation", func() {
 		fakeClient := newFakeRepositoryAccessClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 20, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 20, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		fakeClient.inviteUsers["octocat"] = true
 		factory := &fakeRepositoryAccessClientFactory{client: fakeClient}
@@ -154,7 +154,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 		Expect(k8sClient.Get(ctx, collaboratorKey, collaborator)).To(Succeed())
 		Expect(collaborator.Status.InvitationPending).To(BeTrue())
 		Expect(collaborator.Status.InvitationID).NotTo(BeZero())
-		condition := meta.FindStatusCondition(collaborator.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(collaborator.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionFalse))
 		Expect(condition.Reason).To(Equal("InvitationPending"))

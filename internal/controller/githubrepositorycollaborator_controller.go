@@ -324,7 +324,7 @@ func (r *GitHubRepositoryCollaboratorReconciler) setReadyCondition(
 	}
 
 	meta.SetStatusCondition(&collaborator.Status.Conditions, metav1.Condition{
-		Type:               "Ready",
+		Type:               conditionTypeReady,
 		Status:             status,
 		ObservedGeneration: collaborator.Generation,
 		Reason:             reason,

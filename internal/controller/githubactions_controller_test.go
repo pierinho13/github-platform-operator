@@ -53,10 +53,10 @@ var _ = Describe("GitHub Actions Controllers", func() {
 			repositoryName,
 		)
 		source := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: sourceSecretName, Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: sourceSecretName, Namespace: testDefaultName},
 			Data: map[string][]byte{
-				"token":  []byte("initial-token"),
-				"region": []byte("eu-west-1"),
+				testTokenKey: []byte("initial-token"),
+				"region":     []byte("eu-west-1"),
 			},
 		}
 		Expect(k8sClient.Create(ctx, source)).To(Succeed())
@@ -109,7 +109,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 
 		source := &corev1.Secret{}
 		if err := k8sClient.Get(ctx, types.NamespacedName{
-			Name: sourceSecretName, Namespace: "default",
+			Name: sourceSecretName, Namespace: testDefaultName,
 		}, source); err == nil {
 			Expect(k8sClient.Delete(ctx, source)).To(Succeed())
 		}
@@ -124,7 +124,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 	It("should create a basic repository environment", func() {
 		fakeClient := newFakeActionsClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 100, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 100, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeActionsClientFactory{client: fakeClient}
 		reconciler := &GitHubEnvironmentReconciler{
@@ -132,7 +132,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 			GitHubClientFactory: factory,
 		}
 		resource := &githubv1alpha1.GitHubEnvironment{
-			ObjectMeta: metav1.ObjectMeta{Name: "production", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "production", Namespace: testDefaultName},
 			Spec: githubv1alpha1.GitHubEnvironmentSpec{
 				RepositoryRef: githubv1alpha1.GitHubRepositoryReference{Name: repositoryResourceName},
 				Name:          "production",
@@ -148,7 +148,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 		Expect(fakeClient.upsertEnvironmentCalls).To(Equal(1))
 
 		Expect(k8sClient.Get(ctx, request.NamespacedName, resource)).To(Succeed())
-		condition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(condition.Reason).To(Equal("EnvironmentCreated"))
@@ -158,7 +158,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 	It("should synchronize and rotate a repository Actions secret", func() {
 		fakeClient := newFakeActionsClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 101, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 101, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeActionsClientFactory{client: fakeClient}
 		reconciler := &GitHubActionsSecretReconciler{
@@ -166,14 +166,14 @@ var _ = Describe("GitHub Actions Controllers", func() {
 			GitHubClientFactory: factory,
 		}
 		resource := &githubv1alpha1.GitHubActionsSecret{
-			ObjectMeta: metav1.ObjectMeta{Name: "docker-token", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "docker-token", Namespace: testDefaultName},
 			Spec: githubv1alpha1.GitHubActionsSecretSpec{
 				Target: githubv1alpha1.GitHubActionsTarget{
 					RepositoryRef: &githubv1alpha1.GitHubRepositoryReference{Name: repositoryResourceName},
 				},
 				Name: "DOCKER_TOKEN",
 				ValueFrom: githubv1alpha1.ActionsValueSource{
-					SecretKeyRef: githubv1alpha1.LocalSecretKeyReference{Name: sourceSecretName, Key: "token"},
+					SecretKeyRef: githubv1alpha1.LocalSecretKeyReference{Name: sourceSecretName, Key: testTokenKey},
 				},
 			},
 		}
@@ -187,8 +187,8 @@ var _ = Describe("GitHub Actions Controllers", func() {
 		Expect(fakeClient.upsertSecretCalls).To(Equal(1))
 
 		source := &corev1.Secret{}
-		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sourceSecretName, Namespace: "default"}, source)).To(Succeed())
-		source.Data["token"] = []byte("rotated-token")
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: sourceSecretName, Namespace: testDefaultName}, source)).To(Succeed())
+		source.Data[testTokenKey] = []byte("rotated-token")
 		Expect(k8sClient.Update(ctx, source)).To(Succeed())
 
 		_, err = reconciler.Reconcile(ctx, request)
@@ -196,7 +196,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 		Expect(fakeClient.upsertSecretCalls).To(Equal(2))
 
 		Expect(k8sClient.Get(ctx, request.NamespacedName, resource)).To(Succeed())
-		condition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+		condition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 		Expect(condition).NotTo(BeNil())
 		Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 		Expect(resource.Status.SourceSecretResourceVersion).To(Equal(source.ResourceVersion))
@@ -205,7 +205,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 	It("should synchronize an organization variable with selected repositories", func() {
 		fakeClient := newFakeActionsClient()
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
-			ID: 777, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: "private",
+			ID: 777, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		factory := &fakeActionsClientFactory{client: fakeClient}
 		reconciler := &GitHubActionsVariableReconciler{
@@ -213,7 +213,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 			GitHubClientFactory: factory,
 		}
 		resource := &githubv1alpha1.GitHubActionsVariable{
-			ObjectMeta: metav1.ObjectMeta{Name: "cloud-region", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "cloud-region", Namespace: testDefaultName},
 			Spec: githubv1alpha1.GitHubActionsVariableSpec{
 				Target: githubv1alpha1.GitHubActionsTarget{
 					Organization: &githubv1alpha1.GitHubOrganizationActionsTarget{
@@ -240,7 +240,7 @@ var _ = Describe("GitHub Actions Controllers", func() {
 		Expect(fakeClient.createVariableCalls).To(Equal(1))
 
 		target := githubclient.ActionsTarget{
-			Scope: githubclient.ActionsTargetScopeOrganization, Organization: "k8sready",
+			Scope: githubclient.ActionsTargetScopeOrganization, Organization: testOrganization,
 		}
 		remote, err := fakeClient.GetActionsVariable(ctx, target, "CLOUD_REGION")
 		Expect(err).NotTo(HaveOccurred())
@@ -251,5 +251,5 @@ var _ = Describe("GitHub Actions Controllers", func() {
 })
 
 func clientInDefaultNamespace() client.ListOption {
-	return client.InNamespace("default")
+	return client.InNamespace(testDefaultName)
 }
