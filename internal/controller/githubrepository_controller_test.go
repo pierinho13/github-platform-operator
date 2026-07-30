@@ -38,6 +38,7 @@ type fakeRepositoryClient struct {
 	repositories map[string]*githubclient.Repository
 	createCalls  int
 	updateCalls  int
+	topicCalls   int
 	deleteCalls  int
 }
 
@@ -53,6 +54,18 @@ func repositoryVisibilityPtr(
 	visibility githubv1alpha1.RepositoryVisibility,
 ) *githubv1alpha1.RepositoryVisibility {
 	return &visibility
+}
+
+func repositoryStringPtr(value string) *string {
+	return &value
+}
+
+func repositoryBoolPtr(value bool) *bool {
+	return &value
+}
+
+func repositoryTopicsPtr(values ...string) *[]string {
+	return &values
 }
 
 func newFakeRepositoryClient() *fakeRepositoryClient {
@@ -86,6 +99,7 @@ func (f *fakeRepositoryClient) GetRepository(
 	}
 
 	copy := *repository
+	copy.Topics = append([]string(nil), repository.Topics...)
 	return &copy, nil
 }
 
@@ -103,9 +117,13 @@ func (f *fakeRepositoryClient) CreateRepository(
 	}
 
 	repository := &githubclient.Repository{
-		ID:         int64(f.createCalls),
-		HTMLURL:    fmt.Sprintf("https://github.com/%s/%s", organization, name),
-		Visibility: visibility,
+		ID:             int64(f.createCalls),
+		HTMLURL:        fmt.Sprintf("https://github.com/%s/%s", organization, name),
+		Visibility:     visibility,
+		HasIssues:      true,
+		HasProjects:    true,
+		HasWiki:        true,
+		HasDiscussions: false,
 	}
 	f.repositories[organization+"/"+name] = repository
 
@@ -113,11 +131,11 @@ func (f *fakeRepositoryClient) CreateRepository(
 	return &copy, nil
 }
 
-func (f *fakeRepositoryClient) UpdateRepositoryVisibility(
+func (f *fakeRepositoryClient) UpdateRepository(
 	_ context.Context,
 	organization string,
 	name string,
-	visibility string,
+	update githubclient.RepositoryUpdate,
 ) (*githubclient.Repository, error) {
 	key := organization + "/" + name
 	repository, ok := f.repositories[key]
@@ -126,10 +144,48 @@ func (f *fakeRepositoryClient) UpdateRepositoryVisibility(
 	}
 
 	f.updateCalls++
-	repository.Visibility = visibility
+	if update.Visibility != nil {
+		repository.Visibility = *update.Visibility
+	}
+	if update.Description != nil {
+		repository.Description = *update.Description
+	}
+	if update.Homepage != nil {
+		repository.Homepage = *update.Homepage
+	}
+	if update.HasIssues != nil {
+		repository.HasIssues = *update.HasIssues
+	}
+	if update.HasProjects != nil {
+		repository.HasProjects = *update.HasProjects
+	}
+	if update.HasWiki != nil {
+		repository.HasWiki = *update.HasWiki
+	}
+	if update.HasDiscussions != nil {
+		repository.HasDiscussions = *update.HasDiscussions
+	}
 
 	copy := *repository
+	copy.Topics = append([]string(nil), repository.Topics...)
 	return &copy, nil
+}
+
+func (f *fakeRepositoryClient) ReplaceRepositoryTopics(
+	_ context.Context,
+	organization string,
+	name string,
+	topics []string,
+) ([]string, error) {
+	key := organization + "/" + name
+	repository, ok := f.repositories[key]
+	if !ok {
+		return nil, githubclient.ErrNotFound
+	}
+
+	f.topicCalls++
+	repository.Topics = append([]string(nil), topics...)
+	return append([]string(nil), repository.Topics...), nil
 }
 
 func (f *fakeRepositoryClient) DeleteRepository(
@@ -339,12 +395,91 @@ var _ = Describe("GitHubRepository Controller", func() {
 			}).Should(BeTrue())
 		})
 
+		It("should manage basic repository settings and topics", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
+				ID:             43,
+				HTMLURL:        "https://github.com/k8sready/test-resource",
+				Visibility:     "private",
+				Description:    "old description",
+				Homepage:       "https://old.example.com",
+				Topics:         []string{"legacy"},
+				HasIssues:      true,
+				HasProjects:    true,
+				HasWiki:        true,
+				HasDiscussions: false,
+			}
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Visibility = nil
+			resource.Spec.Description = repositoryStringPtr("Platform API")
+			resource.Spec.Homepage = repositoryStringPtr("https://platform.example.com")
+			resource.Spec.Topics = repositoryTopicsPtr("Kubernetes", "platform")
+			resource.Spec.Features = &githubv1alpha1.RepositoryFeatures{
+				Issues:      repositoryBoolPtr(false),
+				Projects:    repositoryBoolPtr(false),
+				Wiki:        repositoryBoolPtr(false),
+				Discussions: repositoryBoolPtr(true),
+			}
+			resource.Spec.DeletionPolicy = githubv1alpha1.RepositoryDeletionPolicyOrphan
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			By("adding the finalizer and reconciling managed settings")
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(fakeGitHubClient.createCalls).To(Equal(0))
+			Expect(fakeGitHubClient.updateCalls).To(Equal(1))
+			Expect(fakeGitHubClient.topicCalls).To(Equal(1))
+
+			remote := fakeGitHubClient.repositories["k8sready/test-resource"]
+			Expect(remote.Visibility).To(Equal("private"))
+			Expect(remote.Description).To(Equal("Platform API"))
+			Expect(remote.Homepage).To(Equal("https://platform.example.com"))
+			Expect(remote.Topics).To(ConsistOf("kubernetes", "platform"))
+			Expect(remote.HasIssues).To(BeFalse())
+			Expect(remote.HasProjects).To(BeFalse())
+			Expect(remote.HasWiki).To(BeFalse())
+			Expect(remote.HasDiscussions).To(BeTrue())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(resource.Status.Description).To(Equal("Platform API"))
+			Expect(resource.Status.Homepage).To(Equal("https://platform.example.com"))
+			Expect(resource.Status.Topics).To(ConsistOf("kubernetes", "platform"))
+			Expect(resource.Status.Features.Issues).To(BeFalse())
+			Expect(resource.Status.Features.Projects).To(BeFalse())
+			Expect(resource.Status.Features.Wiki).To(BeFalse())
+			Expect(resource.Status.Features.Discussions).To(BeTrue())
+
+			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
+			Expect(readyCondition).NotTo(BeNil())
+			Expect(readyCondition.Reason).To(Equal("RepositoryUpdated"))
+		})
+
 		It("should preserve visibility when adopting an existing repository without visibility", func() {
 			fakeGitHubClient := newFakeRepositoryClient()
 			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
-				ID:         42,
-				HTMLURL:    "https://github.com/k8sready/test-resource",
-				Visibility: "public",
+				ID:             42,
+				HTMLURL:        "https://github.com/k8sready/test-resource",
+				Visibility:     "public",
+				Description:    "existing description",
+				Homepage:       "https://existing.example.com",
+				Topics:         []string{"existing", "repository"},
+				HasIssues:      true,
+				HasProjects:    false,
+				HasWiki:        false,
+				HasDiscussions: true,
 			}
 			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
 			controllerReconciler := &GitHubRepositoryReconciler{
@@ -369,11 +504,24 @@ var _ = Describe("GitHubRepository Controller", func() {
 
 			Expect(fakeGitHubClient.createCalls).To(Equal(0))
 			Expect(fakeGitHubClient.updateCalls).To(Equal(0))
-			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Visibility).To(Equal("public"))
+			Expect(fakeGitHubClient.topicCalls).To(Equal(0))
+
+			remote := fakeGitHubClient.repositories["k8sready/test-resource"]
+			Expect(remote.Visibility).To(Equal("public"))
+			Expect(remote.Description).To(Equal("existing description"))
+			Expect(remote.Homepage).To(Equal("https://existing.example.com"))
+			Expect(remote.Topics).To(ConsistOf("existing", "repository"))
+			Expect(remote.HasIssues).To(BeTrue())
+			Expect(remote.HasProjects).To(BeFalse())
+			Expect(remote.HasWiki).To(BeFalse())
+			Expect(remote.HasDiscussions).To(BeTrue())
 
 			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
 			Expect(resource.Status.RepositoryID).To(Equal(int64(42)))
 			Expect(resource.Status.Visibility).To(Equal(githubv1alpha1.RepositoryVisibilityPublic))
+			Expect(resource.Status.Description).To(Equal("existing description"))
+			Expect(resource.Status.Homepage).To(Equal("https://existing.example.com"))
+			Expect(resource.Status.Topics).To(ConsistOf("existing", "repository"))
 
 			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, "Ready")
 			Expect(readyCondition).NotTo(BeNil())

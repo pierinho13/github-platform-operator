@@ -1,0 +1,11 @@
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubRepositoryTeamAccess
+metadata:
+  name: example-repository-platform-team
+  namespace: default
+spec:
+  repositoryRef:
+    name: example-repository
+  teamSlug: platform
+  permission: maintain
+  deletionPolicy: Orphan

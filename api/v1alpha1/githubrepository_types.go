@@ -34,6 +34,34 @@ const (
 	RepositoryVisibilityPrivate RepositoryVisibility = "private"
 )
 
+// RepositoryFeatures defines optional GitHub repository features managed by the operator.
+// A nil field is observed but not reconciled.
+type RepositoryFeatures struct {
+	// Issues controls whether GitHub Issues are enabled.
+	// +optional
+	Issues *bool `json:"issues,omitempty"`
+
+	// Projects controls whether GitHub Projects are enabled.
+	// +optional
+	Projects *bool `json:"projects,omitempty"`
+
+	// Wiki controls whether the repository wiki is enabled.
+	// +optional
+	Wiki *bool `json:"wiki,omitempty"`
+
+	// Discussions controls whether GitHub Discussions are enabled.
+	// +optional
+	Discussions *bool `json:"discussions,omitempty"`
+}
+
+// RepositoryFeaturesStatus contains the repository feature values observed in GitHub.
+type RepositoryFeaturesStatus struct {
+	Issues      bool `json:"issues"`
+	Projects    bool `json:"projects"`
+	Wiki        bool `json:"wiki"`
+	Discussions bool `json:"discussions"`
+}
+
 // RepositoryDeletionPolicy defines what happens to the remote repository when
 // the GitHubRepository custom resource is deleted.
 // +kubebuilder:validation:Enum=Orphan;Delete
@@ -71,6 +99,29 @@ type GitHubRepositorySpec struct {
 	// keep their current visibility.
 	// +optional
 	Visibility *RepositoryVisibility `json:"visibility,omitempty"`
+
+	// Description is the short repository description. When omitted, the operator
+	// preserves the current value. Set it to an empty string to clear it.
+	// +optional
+	Description *string `json:"description,omitempty"`
+
+	// Homepage is the repository website URL. When omitted, the operator preserves
+	// the current value. Set it to an empty string to clear it.
+	// +optional
+	Homepage *string `json:"homepage,omitempty"`
+
+	// Topics is the complete set of repository topics managed by the operator.
+	// When omitted, existing topics are preserved. Set an empty list to clear all topics.
+	// GitHub stores topic names in lowercase.
+	// +optional
+	// +kubebuilder:validation:MaxItems=20
+	// +listType=set
+	Topics *[]string `json:"topics,omitempty"`
+
+	// Features contains optional repository features. Only fields explicitly set
+	// inside this object are reconciled.
+	// +optional
+	Features *RepositoryFeatures `json:"features,omitempty"`
 
 	// DeletionPolicy determines whether deleting the custom resource also deletes
 	// the remote GitHub repository.
@@ -127,6 +178,23 @@ type GitHubRepositoryStatus struct {
 	// Visibility is the repository visibility last observed in GitHub.
 	// +optional
 	Visibility RepositoryVisibility `json:"visibility,omitempty"`
+
+	// Description is the repository description last observed in GitHub.
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Homepage is the repository homepage last observed in GitHub.
+	// +optional
+	Homepage string `json:"homepage,omitempty"`
+
+	// Topics is the repository topic set last observed in GitHub.
+	// +optional
+	// +listType=set
+	Topics []string `json:"topics,omitempty"`
+
+	// Features contains repository feature values last observed in GitHub.
+	// +optional
+	Features *RepositoryFeaturesStatus `json:"features,omitempty"`
 
 	// ObservedGeneration is the GitHubRepository generation most recently reconciled.
 	// +optional

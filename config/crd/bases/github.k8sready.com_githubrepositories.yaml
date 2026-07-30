@@ -72,6 +72,35 @@ spec:
                 - Orphan
                 - Delete
                 type: string
+              description:
+                description: |-
+                  Description is the short repository description. When omitted, the operator
+                  preserves the current value. Set it to an empty string to clear it.
+                type: string
+              features:
+                description: |-
+                  Features contains optional repository features. Only fields explicitly set
+                  inside this object are reconciled.
+                properties:
+                  discussions:
+                    description: Discussions controls whether GitHub Discussions are
+                      enabled.
+                    type: boolean
+                  issues:
+                    description: Issues controls whether GitHub Issues are enabled.
+                    type: boolean
+                  projects:
+                    description: Projects controls whether GitHub Projects are enabled.
+                    type: boolean
+                  wiki:
+                    description: Wiki controls whether the repository wiki is enabled.
+                    type: boolean
+                type: object
+              homepage:
+                description: |-
+                  Homepage is the repository website URL. When omitted, the operator preserves
+                  the current value. Set it to an empty string to clear it.
+                type: string
               name:
                 description: Name is the name of the GitHub repository.
                 minLength: 1
@@ -95,6 +124,16 @@ spec:
                 x-kubernetes-validations:
                 - message: providerConfigRef is immutable
                   rule: self == oldSelf
+              topics:
+                description: |-
+                  Topics is the complete set of repository topics managed by the operator.
+                  When omitted, existing topics are preserved. Set an empty list to clear all topics.
+                  GitHub stores topic names in lowercase.
+                items:
+                  type: string
+                maxItems: 20
+                type: array
+                x-kubernetes-list-type: set
               visibility:
                 description: |-
                   Visibility determines whether the operator manages the repository visibility.
@@ -170,6 +209,32 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              description:
+                description: Description is the repository description last observed
+                  in GitHub.
+                type: string
+              features:
+                description: Features contains repository feature values last observed
+                  in GitHub.
+                properties:
+                  discussions:
+                    type: boolean
+                  issues:
+                    type: boolean
+                  projects:
+                    type: boolean
+                  wiki:
+                    type: boolean
+                required:
+                - discussions
+                - issues
+                - projects
+                - wiki
+                type: object
+              homepage:
+                description: Homepage is the repository homepage last observed in
+                  GitHub.
+                type: string
               observedGeneration:
                 description: ObservedGeneration is the GitHubRepository generation
                   most recently reconciled.
@@ -187,6 +252,12 @@ spec:
                 description: RepositoryID is the numeric identifier assigned by GitHub.
                 format: int64
                 type: integer
+              topics:
+                description: Topics is the repository topic set last observed in GitHub.
+                items:
+                  type: string
+                type: array
+                x-kubernetes-list-type: set
               url:
                 description: URL is the HTML URL of the GitHub repository.
                 type: string

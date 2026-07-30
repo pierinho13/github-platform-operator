@@ -15,6 +15,8 @@ rules:
   resources:
   - githubproviderconfigs
   - githubrepositories
+  - githubrepositorycollaborators
+  - githubrepositoryteamaccesses
   verbs:
   - create
   - delete
@@ -28,6 +30,8 @@ rules:
   resources:
   - githubproviderconfigs/finalizers
   - githubrepositories/finalizers
+  - githubrepositorycollaborators/finalizers
+  - githubrepositoryteamaccesses/finalizers
   verbs:
   - update
 - apiGroups:
@@ -35,6 +39,8 @@ rules:
   resources:
   - githubproviderconfigs/status
   - githubrepositories/status
+  - githubrepositorycollaborators/status
+  - githubrepositoryteamaccesses/status
   verbs:
   - get
   - patch
