@@ -1,0 +1,49 @@
+version: 2
+
+project_name: github-platform-operator
+
+dist: goreleaser-dist
+
+builds:
+  - id: manager
+    main: ./cmd
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s
+      - -w
+
+archives:
+  - id: manager
+    ids:
+      - manager
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source_code"
+
+changelog:
+  use: github-native
+
+release:
+  github:
+    owner: pierinho13
+    name: github-platform-operator
+  extra_files:
+    - glob: ./dist/helm/*.tgz

@@ -1,0 +1,15 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Local artifacts
+*.tgz
+dist/
+goreleaser-dist/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
