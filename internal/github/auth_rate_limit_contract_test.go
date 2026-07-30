@@ -114,7 +114,7 @@ func TestParseGitHubAppPrivateKeyContract(t *testing.T) {
 
 	privateKey := generateRSAKeyContractTest(t)
 	pkcs1 := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  testRSAPrivateKeyPEMType,
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
 	pkcs8Bytes, err := x509.MarshalPKCS8PrivateKey(privateKey)
@@ -495,7 +495,7 @@ func marshalPKCS1KeyContractTest(t *testing.T, privateKey *rsa.PrivateKey) []byt
 	t.Helper()
 
 	return pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  testRSAPrivateKeyPEMType,
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
 }

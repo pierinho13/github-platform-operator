@@ -406,7 +406,7 @@ func repositoryRulesetFromUpsertForContractTest(
 		ID:          42,
 		Name:        input.Name,
 		Target:      input.Target,
-		SourceType:  "Repository",
+		SourceType:  repositoryRulesetSourceType,
 		Source:      "k8sready/example",
 		Enforcement: input.Enforcement,
 		Rules:       make([]githubclient.RulesetRule, len(input.Rules)),

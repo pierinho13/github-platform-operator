@@ -91,7 +91,7 @@ func (f *fakeRepositoryRulesetClient) ListRepositoryRulesets(
 		result = append(result, githubclient.RepositoryRulesetSummary{
 			ID:          item.ID,
 			Name:        item.Name,
-			SourceType:  "Repository",
+			SourceType:  repositoryRulesetSourceType,
 			Source:      organization + "/" + repository,
 			Enforcement: item.Enforcement,
 		})
@@ -171,7 +171,7 @@ func repositoryRulesetFromInput(
 		ID:           id,
 		Name:         input.Name,
 		Target:       input.Target,
-		SourceType:   "Repository",
+		SourceType:   repositoryRulesetSourceType,
 		Source:       organization + "/" + repository,
 		Enforcement:  input.Enforcement,
 		BypassActors: copyRulesetBypassActors(input.BypassActors),

@@ -42,6 +42,7 @@ import (
 
 const (
 	githubRepositoryRulesetFinalizer = "github.k8sready.com/repository-ruleset-finalizer"
+	repositoryRulesetSourceType      = "Repository"
 	rulesetRequeueInterval           = 5 * time.Minute
 )
 
@@ -266,7 +267,7 @@ func (r *GitHubRepositoryRulesetReconciler) findRepositoryRuleset(
 	var matches []githubclient.RepositoryRulesetSummary
 	for i := range summaries {
 		if summaries[i].Name == resource.Spec.Name &&
-			summaries[i].SourceType == "Repository" {
+			summaries[i].SourceType == repositoryRulesetSourceType {
 			matches = append(matches, summaries[i])
 		}
 	}

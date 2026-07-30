@@ -33,6 +33,8 @@ import (
 	"time"
 )
 
+const testRSAPrivateKeyPEMType = "RSA PRIVATE KEY"
+
 func TestCachedTokenProviderCreatesAndCachesInstallationToken(t *testing.T) {
 	t.Parallel()
 
@@ -41,7 +43,7 @@ func TestCachedTokenProviderCreatesAndCachesInstallationToken(t *testing.T) {
 		t.Fatalf("generate RSA key: %v", err)
 	}
 	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  testRSAPrivateKeyPEMType,
 		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
 	})
 
