@@ -10,10 +10,12 @@ GitHub repositories and their common platform resources.
 It intentionally covers the common platform workflow instead of mirroring the
 entire GitHub API:
 
-- repository creation and safe adoption
-- visibility, description, homepage, topics and repository features
+- repository creation from scratch or templates, with safe adoption
+- public, private and internal visibility, metadata, topics and repository features
+- merge strategies, automatic branch deletion and vulnerability alerts
 - repository rulesets with branch, tag and push targets
-- team and direct collaborator access
+- organization members, teams and team memberships
+- team and direct collaborator repository access
 - GitHub environments
 - Actions secrets and variables for repositories, environments and organizations
 - personal access token and GitHub App installation authentication
@@ -137,8 +139,8 @@ kubectl get ghruleset -A
 ```
 
 `Orphan` is the safe default: deleting the Kubernetes resource keeps the remote
-GitHub resource. Destructive remote deletion or access revocation must be
-requested explicitly.
+GitHub resource. Repositories can also be archived instead of deleted.
+Destructive remote deletion or access revocation must be requested explicitly.
 
 ## Documentation
 
@@ -159,8 +161,9 @@ The project is deliberately smaller than a general-purpose GitHub provider.
 It focuses on making a repository ready for a team to work and deploy without
 trying to expose every GitHub API resource.
 
-Features such as runners, webhooks, repository files, Dependabot secrets and
-complete organization administration are outside the current scope.
+Features such as runners, webhooks, repository files, Dependabot secrets,
+organization policies and complete organization administration remain outside
+the current scope.
 
 ## License
 

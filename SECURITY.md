@@ -36,7 +36,7 @@ for Kubernetes Secrets.
 Treat installation of the operator as a privileged cluster operation:
 
 - run it in a dedicated namespace
-- restrict who can create provider and Actions resources
+- restrict who can create provider, organization, team and Actions resources
 - limit access to the controller service account
 - enable Kubernetes Secret encryption at rest
 - prefer an external secret manager for production values
@@ -59,6 +59,23 @@ cache identity and causes a new installation token to be requested.
 Limit the GitHub App installation to the required repositories and grant only
 the repository and organization permissions needed by the managed resources.
 Protect the PEM Secret at least as strictly as a long-lived token.
+
+## Organization members and teams
+
+`GitHubOrganizationMember`, `GitHubTeam` and `GitHubTeamMembership` require
+organization-level GitHub permissions. Read-only discovery generally requires
+`Members: read`; creating teams, changing roles and revoking membership require
+`Members: write`.
+
+Restrict who can create or update these resources. In particular:
+
+- `GitHubOrganizationMember` with `role: admin` grants organization-owner access
+- `GitHubTeamMembership` with `role: maintainer` grants team administration
+- `Revoke` removes remote membership when the Kubernetes resource is deleted
+- `GitHubTeam` with `deletionPolicy: Delete` deletes the remote team
+
+Use `Orphan` unless remote cleanup is explicitly required, and review provider
+scope before granting organization-wide permissions to a GitHub App.
 
 ## Actions secrets and variables
 
@@ -90,9 +107,10 @@ roles, and compatibility with existing manifests.
 
 ## Destructive operations
 
-Remote deletion and access revocation require explicit policies:
+Remote archival, deletion and access revocation require explicit policies:
 
 ```text
+Archive
 Delete
 Revoke
 ```

@@ -43,6 +43,9 @@ metrics:
 networkPolicy:
   enabled: false
 
+rbac:
+  create: true
+
 resources:
   requests:
     cpu: 10m
@@ -73,8 +76,13 @@ helm upgrade --install github-platform-operator \
 
 ## CRDs and upgrades
 
-The packaged chart includes generated CRDs under `crds/`, including
-`GitHubRepositoryRuleset`. Helm installs them before the controller resources.
+The packaged chart includes generated CRDs under `crds/`, including repository
+rulesets, organization members, teams and team memberships. Helm installs them
+before the controller resources.
+
+When `rbac.create=true`, the chart also creates the cluster-scoped permissions
+needed by every controller, including `GitHubOrganizationMember`, `GitHubTeam`
+and `GitHubTeamMembership`.
 
 Helm does not upgrade or delete resources under `crds/`. When a release changes
 CRD schemas, apply the target CRDs before running `helm upgrade`:
