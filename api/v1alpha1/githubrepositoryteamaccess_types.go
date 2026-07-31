@@ -101,7 +101,3 @@ type GitHubRepositoryTeamAccessList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubRepositoryTeamAccess `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubRepositoryTeamAccess{}, &GitHubRepositoryTeamAccessList{})
-}

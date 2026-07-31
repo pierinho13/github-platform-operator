@@ -104,7 +104,3 @@ type GitHubEnvironmentList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubEnvironment `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubEnvironment{}, &GitHubEnvironmentList{})
-}

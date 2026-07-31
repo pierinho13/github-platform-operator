@@ -110,7 +110,3 @@ type GitHubActionsVariableList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubActionsVariable `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubActionsVariable{}, &GitHubActionsVariableList{})
-}

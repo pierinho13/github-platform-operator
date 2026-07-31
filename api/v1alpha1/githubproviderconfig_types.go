@@ -127,7 +127,3 @@ type GitHubProviderConfigList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubProviderConfig `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubProviderConfig{}, &GitHubProviderConfigList{})
-}
