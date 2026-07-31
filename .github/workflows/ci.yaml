@@ -172,12 +172,7 @@ jobs:
 
           if ! awk '
             function finish_document() {
-              if (
-                is_cluster_role &&
-                has_ruleset &&
-                has_ruleset_status &&
-                has_ruleset_finalizers
-              ) {
+              if (is_cluster_role && has_ruleset && has_ruleset_status && has_ruleset_finalizers) {
                 found = 1
               }
 
