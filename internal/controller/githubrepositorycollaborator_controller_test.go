@@ -59,7 +59,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 				RepositoryRef: githubv1alpha1.GitHubRepositoryReference{
 					Name: repositoryResourceName,
 				},
-				Username:       "octocat",
+				Username:       bypassTestUsername,
 				Permission:     githubv1alpha1.RepositoryPermissionPush,
 				DeletionPolicy: githubv1alpha1.RepositoryAccessDeletionPolicyRevoke,
 			},
@@ -137,7 +137,7 @@ var _ = Describe("GitHubRepositoryCollaborator Controller", func() {
 		fakeClient.repositories["k8sready/"+repositoryName] = &githubclient.Repository{
 			ID: 20, HTMLURL: "https://github.com/k8sready/" + repositoryName, Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
-		fakeClient.inviteUsers["octocat"] = true
+		fakeClient.inviteUsers[bypassTestUsername] = true
 		factory := &fakeRepositoryAccessClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryCollaboratorReconciler{
 			Client: k8sClient, APIReader: k8sClient, Scheme: k8sClient.Scheme(),

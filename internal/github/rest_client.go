@@ -126,25 +126,49 @@ func (c *RESTClient) GetRepository(
 func (c *RESTClient) CreateRepository(
 	ctx context.Context,
 	organization string,
-	name string,
-	private bool,
+	input RepositoryCreate,
 ) (*Repository, error) {
-	requestBody, err := json.Marshal(struct {
-		Name    string `json:"name"`
-		Private bool   `json:"private"`
-	}{
-		Name:    name,
-		Private: private,
-	})
+	var endpoint string
+	var requestBody []byte
+	var err error
+
+	if input.Template != nil {
+		endpoint = fmt.Sprintf(
+			"%s/repos/%s/%s/generate",
+			c.baseURL,
+			url.PathEscape(input.Template.Owner),
+			url.PathEscape(input.Template.Repository),
+		)
+		requestBody, err = json.Marshal(struct {
+			Owner              string `json:"owner"`
+			Name               string `json:"name"`
+			IncludeAllBranches bool   `json:"include_all_branches"`
+			Private            bool   `json:"private"`
+		}{
+			Owner:              organization,
+			Name:               input.Name,
+			IncludeAllBranches: input.Template.IncludeAllBranches,
+			Private:            input.Visibility != "public",
+		})
+	} else {
+		endpoint = fmt.Sprintf(
+			"%s/orgs/%s/repos",
+			c.baseURL,
+			url.PathEscape(organization),
+		)
+		requestBody, err = json.Marshal(struct {
+			Name       string `json:"name"`
+			Visibility string `json:"visibility"`
+			AutoInit   bool   `json:"auto_init"`
+		}{
+			Name:       input.Name,
+			Visibility: input.Visibility,
+			AutoInit:   input.AutoInit,
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("encode create repository request: %w", err)
 	}
-
-	endpoint := fmt.Sprintf(
-		"%s/orgs/%s/repos",
-		c.baseURL,
-		url.PathEscape(organization),
-	)
 
 	response, err := c.do(ctx, http.MethodPost, endpoint, bytes.NewReader(requestBody))
 	if err != nil {
@@ -234,6 +258,86 @@ func (c *RESTClient) ReplaceRepositoryTopics(
 	}
 
 	return payload.Names, nil
+}
+
+// GetRepositoryVulnerabilityAlerts reports whether dependency alerts are enabled.
+func (c *RESTClient) GetRepositoryVulnerabilityAlerts(
+	ctx context.Context,
+	organization string,
+	name string,
+) (bool, error) {
+	response, err := c.do(
+		ctx,
+		http.MethodGet,
+		c.repositoryVulnerabilityAlertsEndpoint(organization, name),
+		nil,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer closeResponseBody(response.Body)
+
+	switch response.StatusCode {
+	case http.StatusNoContent:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	default:
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			return false, decodeAPIError(response)
+		}
+		return false, fmt.Errorf(
+			"unexpected vulnerability alerts response status %d",
+			response.StatusCode,
+		)
+	}
+}
+
+// SetRepositoryVulnerabilityAlerts enables or disables dependency alerts.
+func (c *RESTClient) SetRepositoryVulnerabilityAlerts(
+	ctx context.Context,
+	organization string,
+	name string,
+	enabled bool,
+) error {
+	method := http.MethodDelete
+	if enabled {
+		method = http.MethodPut
+	}
+
+	response, err := c.do(
+		ctx,
+		method,
+		c.repositoryVulnerabilityAlertsEndpoint(organization, name),
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+	defer closeResponseBody(response.Body)
+
+	if response.StatusCode == http.StatusNotFound {
+		return ErrNotFound
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return decodeAPIError(response)
+	}
+	return nil
+}
+
+// ArchiveRepository archives an existing GitHub repository.
+func (c *RESTClient) ArchiveRepository(
+	ctx context.Context,
+	organization string,
+	name string,
+) (*Repository, error) {
+	archived := true
+	return c.UpdateRepository(
+		ctx,
+		organization,
+		name,
+		RepositoryUpdate{Archived: &archived},
+	)
 }
 
 // DeleteRepository deletes an existing GitHub repository.
@@ -525,6 +629,10 @@ func (c *RESTClient) repositoryEndpoint(organization, name string) string {
 
 func (c *RESTClient) repositoryTopicsEndpoint(organization, name string) string {
 	return c.repositoryEndpoint(organization, name) + "/topics"
+}
+
+func (c *RESTClient) repositoryVulnerabilityAlertsEndpoint(organization, name string) string {
+	return c.repositoryEndpoint(organization, name) + "/vulnerability-alerts"
 }
 
 func (c *RESTClient) do(
@@ -855,17 +963,28 @@ func closeResponseBody(body io.ReadCloser) {
 
 func decodeRepository(body io.Reader) (*Repository, error) {
 	var payload struct {
-		ID             int64    `json:"id"`
-		HTMLURL        string   `json:"html_url"`
-		Visibility     string   `json:"visibility"`
-		Private        bool     `json:"private"`
-		Description    *string  `json:"description"`
-		Homepage       *string  `json:"homepage"`
-		Topics         []string `json:"topics"`
-		HasIssues      bool     `json:"has_issues"`
-		HasProjects    bool     `json:"has_projects"`
-		HasWiki        bool     `json:"has_wiki"`
-		HasDiscussions bool     `json:"has_discussions"`
+		ID                       int64    `json:"id"`
+		HTMLURL                  string   `json:"html_url"`
+		Visibility               string   `json:"visibility"`
+		Private                  bool     `json:"private"`
+		Description              *string  `json:"description"`
+		Homepage                 *string  `json:"homepage"`
+		Topics                   []string `json:"topics"`
+		HasIssues                bool     `json:"has_issues"`
+		HasProjects              bool     `json:"has_projects"`
+		HasWiki                  bool     `json:"has_wiki"`
+		HasDiscussions           bool     `json:"has_discussions"`
+		DeleteBranchOnMerge      bool     `json:"delete_branch_on_merge"`
+		IsTemplate               bool     `json:"is_template"`
+		Archived                 bool     `json:"archived"`
+		AllowAutoMerge           bool     `json:"allow_auto_merge"`
+		AllowMergeCommit         bool     `json:"allow_merge_commit"`
+		AllowRebaseMerge         bool     `json:"allow_rebase_merge"`
+		AllowSquashMerge         bool     `json:"allow_squash_merge"`
+		MergeCommitTitle         string   `json:"merge_commit_title"`
+		MergeCommitMessage       string   `json:"merge_commit_message"`
+		SquashMergeCommitTitle   string   `json:"squash_merge_commit_title"`
+		SquashMergeCommitMessage string   `json:"squash_merge_commit_message"`
 	}
 
 	if err := json.NewDecoder(io.LimitReader(body, maxResponseBodySize)).Decode(&payload); err != nil {
@@ -890,16 +1009,27 @@ func decodeRepository(body io.Reader) (*Repository, error) {
 	}
 
 	return &Repository{
-		ID:             payload.ID,
-		HTMLURL:        payload.HTMLURL,
-		Visibility:     visibility,
-		Description:    description,
-		Homepage:       homepage,
-		Topics:         payload.Topics,
-		HasIssues:      payload.HasIssues,
-		HasProjects:    payload.HasProjects,
-		HasWiki:        payload.HasWiki,
-		HasDiscussions: payload.HasDiscussions,
+		ID:                       payload.ID,
+		HTMLURL:                  payload.HTMLURL,
+		Visibility:               visibility,
+		Description:              description,
+		Homepage:                 homepage,
+		Topics:                   payload.Topics,
+		HasIssues:                payload.HasIssues,
+		HasProjects:              payload.HasProjects,
+		HasWiki:                  payload.HasWiki,
+		HasDiscussions:           payload.HasDiscussions,
+		DeleteBranchOnMerge:      payload.DeleteBranchOnMerge,
+		IsTemplate:               payload.IsTemplate,
+		Archived:                 payload.Archived,
+		AllowAutoMerge:           payload.AllowAutoMerge,
+		AllowMergeCommit:         payload.AllowMergeCommit,
+		AllowRebaseMerge:         payload.AllowRebaseMerge,
+		AllowSquashMerge:         payload.AllowSquashMerge,
+		MergeCommitTitle:         payload.MergeCommitTitle,
+		MergeCommitMessage:       payload.MergeCommitMessage,
+		SquashMergeCommitTitle:   payload.SquashMergeCommitTitle,
+		SquashMergeCommitMessage: payload.SquashMergeCommitMessage,
 	}, nil
 }
 

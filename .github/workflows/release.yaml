@@ -37,6 +37,33 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Generate code and manifests
+        run: make generate manifests
+
+      - name: Format code
+        run: make fmt
+
+      - name: Verify generated files are committed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          changes="$(git status --porcelain)"
+
+          if [[ -n "${changes}" ]]; then
+            echo "Release generation produced uncommitted changes." >&2
+            echo >&2
+            printf '%s\n' "${changes}" >&2
+            echo >&2
+            git diff -- .
+            echo >&2
+            echo "Run and commit:" >&2
+            echo >&2
+            echo "  make generate manifests" >&2
+            echo "  make fmt" >&2
+            exit 1
+          fi
+
       - name: Install semantic version utility
         shell: bash
         env:
@@ -143,6 +170,80 @@ jobs:
           ./hack/package-helm-chart.sh \
             "${CHART_VERSION}" \
             "${APP_VERSION}"
+
+      - name: Verify packaged Helm chart
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+        run: |
+          set -euo pipefail
+
+          chart="dist/helm/github-platform-operator-${CHART_VERSION}.tgz"
+          rendered="$(mktemp)"
+
+          test -f "${chart}"
+          tar -tzf "${chart}"
+
+          helm template \
+            github-platform-operator \
+            "${chart}" \
+            --namespace github-platform-operator-system \
+            > "${rendered}"
+
+          if ! awk '
+            function finish_document() {
+              if (
+                is_cluster_role &&
+                has_ruleset &&
+                has_ruleset_status &&
+                has_ruleset_finalizers
+              ) {
+                found = 1
+              }
+
+              is_cluster_role = 0
+              has_ruleset = 0
+              has_ruleset_status = 0
+              has_ruleset_finalizers = 0
+            }
+
+            /^---[[:space:]]*$/ {
+              finish_document()
+              next
+            }
+
+            /^[[:space:]]*kind:[[:space:]]*ClusterRole[[:space:]]*$/ {
+              is_cluster_role = 1
+            }
+
+            is_cluster_role &&
+            /^[[:space:]]*-[[:space:]]*githubrepositoryrulesets[[:space:]]*$/ {
+              has_ruleset = 1
+            }
+
+            is_cluster_role &&
+            /githubrepositoryrulesets\/status/ {
+              has_ruleset_status = 1
+            }
+
+            is_cluster_role &&
+            /githubrepositoryrulesets\/finalizers/ {
+              has_ruleset_finalizers = 1
+            }
+
+            END {
+              finish_document()
+              exit(found ? 0 : 1)
+            }
+          ' "${rendered}"; then
+            echo "The packaged Helm chart does not contain the complete GitHubRepositoryRuleset RBAC." >&2
+            echo "Publishing has been stopped." >&2
+            echo "Check config/rbac/role.yaml and hack/package-helm-chart.sh." >&2
+            exit 1
+          fi
+
+          echo "GitHubRepositoryRuleset RBAC is present in the packaged chart."
 
       - name: Validate GoReleaser configuration
         if: steps.version.outputs.publish == 'true'

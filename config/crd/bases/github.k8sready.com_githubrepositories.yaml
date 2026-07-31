@@ -63,13 +63,26 @@ spec:
           spec:
             description: GitHubRepositorySpec defines the desired state of GitHubRepository.
             properties:
+              autoInit:
+                description: |-
+                  AutoInit creates an initial commit with an empty README. It is only used when
+                  creating a repository and cannot be changed afterwards.
+                type: boolean
+                x-kubernetes-validations:
+                - message: autoInit is immutable
+                  rule: self == oldSelf
+              deleteBranchOnMerge:
+                description: DeleteBranchOnMerge controls automatic deletion of merged
+                  head branches.
+                type: boolean
               deletionPolicy:
                 default: Orphan
                 description: |-
-                  DeletionPolicy determines whether deleting the custom resource also deletes
-                  the remote GitHub repository.
+                  DeletionPolicy determines whether deleting the custom resource orphans,
+                  archives or permanently deletes the remote GitHub repository.
                 enum:
                 - Orphan
+                - Archive
                 - Delete
                 type: string
               description:
@@ -101,6 +114,60 @@ spec:
                   Homepage is the repository website URL. When omitted, the operator preserves
                   the current value. Set it to an empty string to clear it.
                 type: string
+              isTemplate:
+                description: IsTemplate controls whether this repository can be used
+                  as a template.
+                type: boolean
+              mergeOptions:
+                description: MergeOptions contains optional pull-request merge settings.
+                properties:
+                  allowAutoMerge:
+                    description: AllowAutoMerge controls whether pull requests can
+                      use auto-merge.
+                    type: boolean
+                  allowMergeCommit:
+                    description: AllowMergeCommit controls whether merge commits are
+                      allowed.
+                    type: boolean
+                  allowRebaseMerge:
+                    description: AllowRebaseMerge controls whether rebase merges are
+                      allowed.
+                    type: boolean
+                  allowSquashMerge:
+                    description: AllowSquashMerge controls whether squash merges are
+                      allowed.
+                    type: boolean
+                  mergeCommitMessage:
+                    description: MergeCommitMessage controls the default body for
+                      merge commits.
+                    enum:
+                    - PR_BODY
+                    - PR_TITLE
+                    - BLANK
+                    type: string
+                  mergeCommitTitle:
+                    description: MergeCommitTitle controls the default title for merge
+                      commits.
+                    enum:
+                    - PR_TITLE
+                    - MERGE_MESSAGE
+                    type: string
+                  squashMergeCommitMessage:
+                    description: SquashMergeCommitMessage controls the default body
+                      for squash merges.
+                    enum:
+                    - PR_BODY
+                    - COMMIT_MESSAGES
+                    - BLANK
+                    type: string
+                  squashMergeCommitTitle:
+                    description: SquashMergeCommitTitle controls the default title
+                      for squash merges.
+                    enum:
+                    - PR_TITLE
+                    - COMMIT_OR_PR_TITLE
+                    type: string
+                type: object
               name:
                 description: Name is the name of the GitHub repository.
                 minLength: 1
@@ -124,6 +191,31 @@ spec:
                 x-kubernetes-validations:
                 - message: providerConfigRef is immutable
                   rule: self == oldSelf
+              template:
+                description: |-
+                  Template creates the repository from an existing template. It is only used
+                  during creation and cannot be changed afterwards.
+                properties:
+                  includeAllBranches:
+                    description: IncludeAllBranches copies every branch instead of
+                      only the default branch.
+                    type: boolean
+                  owner:
+                    description: Owner is the user or organization that owns the template
+                      repository.
+                    minLength: 1
+                    type: string
+                  repository:
+                    description: Repository is the template repository name.
+                    minLength: 1
+                    type: string
+                required:
+                - owner
+                - repository
+                type: object
+                x-kubernetes-validations:
+                - message: template is immutable
+                  rule: self == oldSelf
               topics:
                 description: |-
                   Topics is the complete set of repository topics managed by the operator.
@@ -138,17 +230,30 @@ spec:
                 description: |-
                   Visibility determines whether the operator manages the repository visibility.
                   When omitted, new repositories are created as private, while existing repositories
-                  keep their current visibility.
+                  keep their current visibility. Internal visibility requires GitHub Enterprise.
                 enum:
                 - public
                 - private
+                - internal
                 type: string
+              vulnerabilityAlerts:
+                description: |-
+                  VulnerabilityAlerts controls dependency graph vulnerability alerts. This
+                  setting requires repository Administration permission.
+                type: boolean
             required:
             - name
             type: object
+            x-kubernetes-validations:
+            - message: template and autoInit are mutually exclusive
+              rule: '!(has(self.template) && has(self.autoInit))'
           status:
             description: GitHubRepositoryStatus defines the observed state of GitHubRepository.
             properties:
+              archived:
+                description: Archived indicates whether GitHub reports the repository
+                  as archived.
+                type: boolean
               conditions:
                 description: Conditions describe the current reconciliation state.
                 items:
@@ -209,6 +314,10 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              deleteBranchOnMerge:
+                description: DeleteBranchOnMerge is the observed merged-branch cleanup
+                  setting.
+                type: boolean
               description:
                 description: Description is the repository description last observed
                   in GitHub.
@@ -235,6 +344,56 @@ spec:
                 description: Homepage is the repository homepage last observed in
                   GitHub.
                 type: string
+              isTemplate:
+                description: IsTemplate is the observed template-repository setting.
+                type: boolean
+              mergeOptions:
+                description: MergeOptions contains merge settings observed in GitHub.
+                properties:
+                  allowAutoMerge:
+                    type: boolean
+                  allowMergeCommit:
+                    type: boolean
+                  allowRebaseMerge:
+                    type: boolean
+                  allowSquashMerge:
+                    type: boolean
+                  mergeCommitMessage:
+                    description: RepositoryMergeCommitMessage defines the default
+                      merge-commit message format.
+                    enum:
+                    - PR_BODY
+                    - PR_TITLE
+                    - BLANK
+                    type: string
+                  mergeCommitTitle:
+                    description: RepositoryMergeCommitTitle defines the default merge-commit
+                      title format.
+                    enum:
+                    - PR_TITLE
+                    - MERGE_MESSAGE
+                    type: string
+                  squashMergeCommitMessage:
+                    description: RepositorySquashMergeCommitMessage defines the default
+                      squash-merge message format.
+                    enum:
+                    - PR_BODY
+                    - COMMIT_MESSAGES
+                    - BLANK
+                    type: string
+                  squashMergeCommitTitle:
+                    description: RepositorySquashMergeCommitTitle defines the default
+                      squash-merge title format.
+                    enum:
+                    - PR_TITLE
+                    - COMMIT_OR_PR_TITLE
+                    type: string
+                required:
+                - allowAutoMerge
+                - allowMergeCommit
+                - allowRebaseMerge
+                - allowSquashMerge
+                type: object
               observedGeneration:
                 description: ObservedGeneration is the GitHubRepository generation
                   most recently reconciled.
@@ -267,7 +426,12 @@ spec:
                 enum:
                 - public
                 - private
+                - internal
                 type: string
+              vulnerabilityAlerts:
+                description: VulnerabilityAlerts is populated when spec.vulnerabilityAlerts
+                  is managed.
+                type: boolean
             type: object
         type: object
     served: true

@@ -183,6 +183,58 @@ func (r *GitHubProviderConfigReconciler) reconcileDelete(
 		}
 	}
 
+	var organizationMembers githubv1alpha1.GitHubOrganizationMemberList
+	if err := r.List(ctx, &organizationMembers); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubOrganizationMembers: %w", err)
+	}
+	for i := range organizationMembers.Items {
+		resource := &organizationMembers.Items[i]
+		if resource.Spec.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubOrganizationMember %s/%s", resource.Namespace, resource.Name),
+			)
+		}
+	}
+
+	var teams githubv1alpha1.GitHubTeamList
+	if err := r.List(ctx, &teams); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubTeams: %w", err)
+	}
+	for i := range teams.Items {
+		resource := &teams.Items[i]
+		if resource.Spec.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubTeam %s/%s", resource.Namespace, resource.Name),
+			)
+		}
+	}
+
+	var teamMemberships githubv1alpha1.GitHubTeamMembershipList
+	if err := r.List(ctx, &teamMemberships); err != nil {
+		return ctrl.Result{}, fmt.Errorf("list GitHubTeamMemberships: %w", err)
+	}
+	for i := range teamMemberships.Items {
+		resource := &teamMemberships.Items[i]
+		var team githubv1alpha1.GitHubTeam
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: resource.Namespace,
+			Name:      resource.Spec.TeamRef.Name,
+		}, &team); err != nil {
+			continue
+		}
+		if team.Spec.EffectiveProviderConfigRef() == provider.Name {
+			return r.providerInUse(
+				ctx,
+				provider,
+				fmt.Sprintf("GitHubTeamMembership %s/%s", resource.Namespace, resource.Name),
+			)
+		}
+	}
+
 	var rulesets githubv1alpha1.GitHubRepositoryRulesetList
 	if err := r.List(ctx, &rulesets); err != nil {
 		return ctrl.Result{}, fmt.Errorf("list GitHubRepositoryRulesets: %w", err)

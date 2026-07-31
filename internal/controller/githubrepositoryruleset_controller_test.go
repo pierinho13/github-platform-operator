@@ -298,7 +298,7 @@ var _ = Describe("GitHubRepositoryRuleset Controller", func() {
 					},
 					{
 						ActorType: githubv1alpha1.GitHubRulesetBypassActorUser,
-						Username:  "octocat",
+						Username:  bypassTestUsername,
 					},
 				},
 				Conditions: &githubv1alpha1.GitHubRulesetConditions{
@@ -355,7 +355,7 @@ var _ = Describe("GitHubRepositoryRuleset Controller", func() {
 			Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
 		fakeClient.teamIDs[testOrganization+"/platform"] = 7001
-		fakeClient.userIDs["octocat"] = 7002
+		fakeClient.userIDs[bypassTestUsername] = 7002
 		factory := &fakeRepositoryRulesetClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryRulesetReconciler{
 			Client:              k8sClient,
