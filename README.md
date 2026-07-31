@@ -65,12 +65,12 @@ The chart is published as an OCI artifact at:
 oci://ghcr.io/pierinho13/charts/github-platform-operator
 ```
 
-Install version `0.1.1`:
+Install version `0.4.1`:
 
 ```bash
 helm upgrade --install github-platform-operator \
   oci://ghcr.io/pierinho13/charts/github-platform-operator \
-  --version 0.1.1 \
+  --version 0.4.1 \
   --namespace github-platform-operator-system \
   --create-namespace
 ```
