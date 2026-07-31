@@ -116,6 +116,10 @@ spec:
   name: protect-main
   target: branch
   enforcement: disabled
+  bypassActors:
+    - actorType: Team
+      teamSlug: platform
+      bypassMode: always
   conditions:
     refName:
       include:

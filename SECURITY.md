@@ -81,6 +81,13 @@ resources using `enforcement: active` or privileged bypass actors.
 Rule parameters are schemaless and are sent to GitHub. Review changes to
 `spec.rules[].parameters` as carefully as changes to RBAC or deployment policy.
 
+When a bypass actor uses `teamSlug`, the controller calls GitHub's team lookup
+API and therefore needs organization `Members: read` permission; classic
+personal access tokens need `read:org`. Usernames are resolved through GitHub's
+public user endpoint. Prefer `teamSlug` and `username`
+for maintainability, while retaining `actorID` for integrations, repository
+roles, and compatibility with existing manifests.
+
 ## Destructive operations
 
 Remote deletion and access revocation require explicit policies:

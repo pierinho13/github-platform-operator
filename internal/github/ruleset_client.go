@@ -95,6 +95,8 @@ func (f RESTClientFactory) NewRepositoryRulesetClient(
 // RepositoryRulesetClient defines the GitHub ruleset operations used by the controller.
 type RepositoryRulesetClient interface {
 	GetRepository(ctx context.Context, organization, name string) (*Repository, error)
+	GetTeamIDBySlug(ctx context.Context, organization, teamSlug string) (int64, error)
+	GetUserIDByUsername(ctx context.Context, username string) (int64, error)
 	ListRepositoryRulesets(
 		ctx context.Context,
 		organization string,

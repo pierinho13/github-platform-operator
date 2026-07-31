@@ -25,6 +25,7 @@ RepositoryAvailable
 RulesetCreated
 RulesetUpdated
 RulesetAvailable
+BypassActorUnavailable
 AccessConfigured
 InvitationPending
 EnvironmentCreated
@@ -231,6 +232,13 @@ restriction rather than an operator authentication failure:
 ```text
 Upgrade to GitHub Pro or make this repository public to enable this feature.
 ```
+
+### `BypassActorUnavailable`
+
+A `teamSlug` or `username` could not be resolved. Confirm the identifier and the
+provider organization. Team resolution also requires organization
+`Members: read` permission; classic personal access tokens need `read:org`. The
+condition message includes the failed actor and the GitHub API error.
 
 ### Ruleset returns `422`
 

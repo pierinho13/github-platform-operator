@@ -26,6 +26,61 @@ import (
 	"net/url"
 )
 
+// GetTeamIDBySlug resolves an organization team slug to GitHub's numeric ID.
+func (c *RESTClient) GetTeamIDBySlug(
+	ctx context.Context,
+	organization string,
+	teamSlug string,
+) (int64, error) {
+	endpoint := fmt.Sprintf(
+		"%s/orgs/%s/teams/%s",
+		c.baseURL,
+		url.PathEscape(organization),
+		url.PathEscape(teamSlug),
+	)
+	return c.getRulesetActorID(ctx, endpoint, "team")
+}
+
+// GetUserIDByUsername resolves a GitHub username to its numeric user ID.
+func (c *RESTClient) GetUserIDByUsername(
+	ctx context.Context,
+	username string,
+) (int64, error) {
+	endpoint := fmt.Sprintf("%s/users/%s", c.baseURL, url.PathEscape(username))
+	return c.getRulesetActorID(ctx, endpoint, "user")
+}
+
+func (c *RESTClient) getRulesetActorID(
+	ctx context.Context,
+	endpoint string,
+	actorType string,
+) (int64, error) {
+	response, err := c.do(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer closeResponseBody(response.Body)
+
+	if response.StatusCode == http.StatusNotFound {
+		return 0, ErrNotFound
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return 0, decodeAPIError(response)
+	}
+
+	var payload struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, maxResponseBodySize)).Decode(&payload); err != nil {
+		return 0, fmt.Errorf("decode GitHub %s response: %w", actorType, err)
+	}
+	if payload.ID <= 0 {
+		return 0, fmt.Errorf("GitHub %s response contains an invalid ID %d", actorType, payload.ID)
+	}
+
+	return payload.ID, nil
+}
+
 // ListRepositoryRulesets returns only repository-owned rulesets.
 // Organization and enterprise parent rulesets are intentionally excluded.
 func (c *RESTClient) ListRepositoryRulesets(
