@@ -35,6 +35,9 @@ The Helm chart installs these resources:
 
 ```text
 githubproviderconfigs.github.k8sready.com
+githuborganizationmembers.github.k8sready.com
+githubteams.github.k8sready.com
+githubteammemberships.github.k8sready.com
 githubrepositories.github.k8sready.com
 githubrepositoryrulesets.github.k8sready.com
 githubrepositoryteamaccesses.github.k8sready.com
@@ -123,6 +126,58 @@ example:
 ```yaml
 apiURL: https://github.example.com/api/v3
 ```
+
+## Manage organization membership and teams
+
+Organization membership and team management require GitHub organization
+`Members: write` permission.
+
+Create a team, ensure a user belongs to the organization and assign that user
+to the team:
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubOrganizationMember
+metadata:
+  name: octocat
+  namespace: default
+spec:
+  providerConfigRef: default
+  username: octocat
+  role: member
+  deletionPolicy: Orphan
+---
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubTeam
+metadata:
+  name: platform
+  namespace: default
+spec:
+  providerConfigRef: default
+  name: Platform
+  privacy: closed
+  deletionPolicy: Orphan
+---
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubTeamMembership
+metadata:
+  name: platform-octocat
+  namespace: default
+spec:
+  teamRef:
+    name: platform
+  username: octocat
+  role: member
+  deletionPolicy: Orphan
+```
+
+```bash
+kubectl apply -f organization-access.yaml
+kubectl get ghorgmember,ghteam,ghteammember -A
+```
+
+A new organization or team member can remain pending until the GitHub
+invitation is accepted.
 
 ## Create or adopt a repository
 
@@ -217,8 +272,9 @@ support rulesets. Testing against a disposable repository is recommended.
 
 ## Next steps
 
+- Manage [organization members and teams](resources.md#organization-membership-and-teams).
 - Review the complete [`GitHubRepositoryRuleset`](resources.md#githubrepositoryruleset) API.
-- Add [team or collaborator access](resources.md#repository-access).
+- Add [team or collaborator repository access](resources.md#repository-access).
 - Create an [environment](resources.md#githubenvironment).
 - Synchronize [Actions secrets and variables](resources.md#github-actions-secrets-and-variables).
 - Review [deletion policies and upgrades](operations.md).
