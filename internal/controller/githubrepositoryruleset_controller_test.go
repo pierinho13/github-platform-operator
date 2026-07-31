@@ -49,17 +49,23 @@ func (f *fakeRepositoryRulesetClientFactory) NewRepositoryRulesetClient(
 type fakeRepositoryRulesetClient struct {
 	repositories map[string]*githubclient.Repository
 	rulesets     map[string]*githubclient.RepositoryRuleset
+	teamIDs      map[string]int64
+	userIDs      map[string]int64
 	nextID       int64
 
-	createCalls int
-	updateCalls int
-	deleteCalls int
+	createCalls     int
+	updateCalls     int
+	deleteCalls     int
+	teamLookupCalls int
+	userLookupCalls int
 }
 
 func newFakeRepositoryRulesetClient() *fakeRepositoryRulesetClient {
 	return &fakeRepositoryRulesetClient{
 		repositories: make(map[string]*githubclient.Repository),
 		rulesets:     make(map[string]*githubclient.RepositoryRuleset),
+		teamIDs:      make(map[string]int64),
+		userIDs:      make(map[string]int64),
 		nextID:       100,
 	}
 }
@@ -75,6 +81,31 @@ func (f *fakeRepositoryRulesetClient) GetRepository(
 	}
 	copy := *item
 	return &copy, nil
+}
+
+func (f *fakeRepositoryRulesetClient) GetTeamIDBySlug(
+	_ context.Context,
+	organization string,
+	teamSlug string,
+) (int64, error) {
+	f.teamLookupCalls++
+	actorID, ok := f.teamIDs[organization+"/"+teamSlug]
+	if !ok {
+		return 0, githubclient.ErrNotFound
+	}
+	return actorID, nil
+}
+
+func (f *fakeRepositoryRulesetClient) GetUserIDByUsername(
+	_ context.Context,
+	username string,
+) (int64, error) {
+	f.userLookupCalls++
+	actorID, ok := f.userIDs[username]
+	if !ok {
+		return 0, githubclient.ErrNotFound
+	}
+	return actorID, nil
 }
 
 func (f *fakeRepositoryRulesetClient) ListRepositoryRulesets(
@@ -260,6 +291,16 @@ var _ = Describe("GitHubRepositoryRuleset Controller", func() {
 				Name:          "protect-main",
 				Target:        githubv1alpha1.GitHubRulesetTargetBranch,
 				Enforcement:   githubv1alpha1.GitHubRulesetEnforcementActive,
+				BypassActors: []githubv1alpha1.GitHubRulesetBypassActor{
+					{
+						ActorType: githubv1alpha1.GitHubRulesetBypassActorTeam,
+						TeamSlug:  "platform",
+					},
+					{
+						ActorType: githubv1alpha1.GitHubRulesetBypassActorUser,
+						Username:  "octocat",
+					},
+				},
 				Conditions: &githubv1alpha1.GitHubRulesetConditions{
 					RefName: &githubv1alpha1.GitHubRulesetRefNameCondition{
 						Include: []string{"~DEFAULT_BRANCH"},
@@ -313,6 +354,8 @@ var _ = Describe("GitHubRepositoryRuleset Controller", func() {
 			HTMLURL:    "https://github.com/k8sready/" + repositoryName,
 			Visibility: string(githubv1alpha1.RepositoryVisibilityPrivate),
 		}
+		fakeClient.teamIDs[testOrganization+"/platform"] = 7001
+		fakeClient.userIDs["octocat"] = 7002
 		factory := &fakeRepositoryRulesetClientFactory{client: fakeClient}
 		reconciler := &GitHubRepositoryRulesetReconciler{
 			Client:              k8sClient,
@@ -331,12 +374,21 @@ var _ = Describe("GitHubRepositoryRuleset Controller", func() {
 		_, err = reconciler.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fakeClient.createCalls).To(Equal(1))
+		Expect(fakeClient.teamLookupCalls).To(Equal(1))
+		Expect(fakeClient.userLookupCalls).To(Equal(1))
 
 		for _, remote := range fakeClient.rulesets {
 			Expect(remote.Conditions).NotTo(BeNil())
 			Expect(remote.Conditions.RefName).NotTo(BeNil())
 			Expect(remote.Conditions.RefName.Exclude).NotTo(BeNil())
 			Expect(remote.Conditions.RefName.Exclude).To(BeEmpty())
+			Expect(remote.BypassActors).To(HaveLen(2))
+			Expect(remote.BypassActors[0].ActorID).NotTo(BeNil())
+			Expect(*remote.BypassActors[0].ActorID).To(Equal(int64(7001)))
+			Expect(remote.BypassActors[0].ActorType).To(Equal("Team"))
+			Expect(remote.BypassActors[1].ActorID).NotTo(BeNil())
+			Expect(*remote.BypassActors[1].ActorID).To(Equal(int64(7002)))
+			Expect(remote.BypassActors[1].ActorType).To(Equal("User"))
 		}
 
 		resource := &githubv1alpha1.GitHubRepositoryRuleset{}

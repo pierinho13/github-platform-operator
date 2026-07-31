@@ -138,8 +138,12 @@ spec:
   target: branch
   enforcement: active
   bypassActors:
-    - actorType: OrganizationAdmin
+    - actorType: Team
+      teamSlug: platform
       bypassMode: always
+    - actorType: User
+      username: release-bot
+      bypassMode: pull_request
   conditions:
     refName:
       include:
@@ -206,6 +210,27 @@ max_file_size
 
 Rule-specific `parameters` are preserved as schemaless JSON and sent to GitHub.
 Parameterless rules omit `parameters`.
+
+Bypass actors can use human-readable identifiers for teams and users:
+
+```yaml
+bypassActors:
+  - actorType: Team
+    teamSlug: platform
+    bypassMode: always
+  - actorType: User
+    username: release-bot
+    bypassMode: pull_request
+```
+
+The controller resolves `teamSlug` and `username` to GitHub's numeric actor IDs
+before creating or updating the ruleset. Existing manifests using `actorID`
+remain supported. Use exactly one of `teamSlug` or `actorID` for `Team`, and
+exactly one of `username` or `actorID` for `User`. `Integration` and
+`RepositoryRole` continue to require `actorID`; `OrganizationAdmin` and
+`DeployKey` accept no identifier. Resolving a team slug requires GitHub
+organization `Members: read` permission; classic personal access tokens need
+`read:org`.
 
 Ruleset management semantics:
 

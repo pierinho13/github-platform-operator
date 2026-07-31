@@ -11,8 +11,11 @@ spec:
   enforcement: active
   bypassActors:
     - actorType: Team
-      actorID: 123456
+      teamSlug: platform
       bypassMode: pull_request
+    - actorType: User
+      username: release-bot
+      bypassMode: always
   conditions:
     refName:
       include:
