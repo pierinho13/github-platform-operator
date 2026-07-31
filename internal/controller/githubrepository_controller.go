@@ -229,11 +229,23 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 	if errors.Is(err, githubclient.ErrNotFound) {
 		logger.Info("GitHub repository does not exist, creating it")
 
+		createInput := githubclient.RepositoryCreate{
+			Name:       repository.Spec.Name,
+			Visibility: string(repository.Spec.EffectiveVisibilityForCreation()),
+			AutoInit:   repository.Spec.EffectiveAutoInit(),
+		}
+		if repository.Spec.Template != nil {
+			createInput.Template = &githubclient.RepositoryTemplateCreate{
+				Owner:              repository.Spec.Template.Owner,
+				Repository:         repository.Spec.Template.Repository,
+				IncludeAllBranches: repository.Spec.Template.IncludeAllBranches,
+			}
+		}
+
 		remoteRepository, err = repositoryClient.CreateRepository(
 			ctx,
 			organization,
-			repository.Spec.Name,
-			repository.Spec.EffectiveVisibilityForCreation() == githubv1alpha1.RepositoryVisibilityPrivate,
+			createInput,
 		)
 		if err != nil {
 			return nil, "", fmt.Errorf(
@@ -300,6 +312,44 @@ func (r *GitHubRepositoryReconciler) reconcileRemoteRepository(
 		}
 	}
 
+	if repository.Spec.VulnerabilityAlerts != nil {
+		observed, err := repositoryClient.GetRepositoryVulnerabilityAlerts(
+			ctx,
+			organization,
+			repository.Spec.Name,
+		)
+		if err != nil {
+			return nil, "", fmt.Errorf(
+				"get GitHub repository %s/%s vulnerability alerts: %w",
+				organization,
+				repository.Spec.Name,
+				err,
+			)
+		}
+		if observed != *repository.Spec.VulnerabilityAlerts {
+			logger.Info(
+				"updating GitHub repository vulnerability alerts",
+				"enabled", *repository.Spec.VulnerabilityAlerts,
+			)
+			if err := repositoryClient.SetRepositoryVulnerabilityAlerts(
+				ctx,
+				organization,
+				repository.Spec.Name,
+				*repository.Spec.VulnerabilityAlerts,
+			); err != nil {
+				return nil, "", fmt.Errorf(
+					"update GitHub repository %s/%s vulnerability alerts: %w",
+					organization,
+					repository.Spec.Name,
+					err,
+				)
+			}
+			observed = *repository.Spec.VulnerabilityAlerts
+			updated = true
+		}
+		remoteRepository.VulnerabilityAlerts = &observed
+	}
+
 	switch {
 	case created:
 		return remoteRepository, "RepositoryCreated", nil
@@ -321,6 +371,18 @@ func desiredRepositoryUpdate(
 ) githubclient.RepositoryUpdate {
 	var update githubclient.RepositoryUpdate
 
+	applyRepositoryCoreUpdate(&update, spec, remote)
+	applyRepositoryFeaturesUpdate(&update, spec.Features, remote)
+	applyRepositoryMergeOptionsUpdate(&update, spec.MergeOptions, remote)
+
+	return update
+}
+
+func applyRepositoryCoreUpdate(
+	update *githubclient.RepositoryUpdate,
+	spec githubv1alpha1.GitHubRepositorySpec,
+	remote *githubclient.Repository,
+) {
 	if spec.Visibility != nil && remote.Visibility != string(*spec.Visibility) {
 		visibility := string(*spec.Visibility)
 		update.Visibility = &visibility
@@ -331,23 +393,77 @@ func desiredRepositoryUpdate(
 	if spec.Homepage != nil && remote.Homepage != *spec.Homepage {
 		update.Homepage = spec.Homepage
 	}
-	if spec.Features != nil {
-		if spec.Features.Issues != nil && remote.HasIssues != *spec.Features.Issues {
-			update.HasIssues = spec.Features.Issues
-		}
-		if spec.Features.Projects != nil && remote.HasProjects != *spec.Features.Projects {
-			update.HasProjects = spec.Features.Projects
-		}
-		if spec.Features.Wiki != nil && remote.HasWiki != *spec.Features.Wiki {
-			update.HasWiki = spec.Features.Wiki
-		}
-		if spec.Features.Discussions != nil &&
-			remote.HasDiscussions != *spec.Features.Discussions {
-			update.HasDiscussions = spec.Features.Discussions
-		}
+	if spec.DeleteBranchOnMerge != nil &&
+		remote.DeleteBranchOnMerge != *spec.DeleteBranchOnMerge {
+		update.DeleteBranchOnMerge = spec.DeleteBranchOnMerge
 	}
+	if spec.IsTemplate != nil && remote.IsTemplate != *spec.IsTemplate {
+		update.IsTemplate = spec.IsTemplate
+	}
+}
 
-	return update
+func applyRepositoryFeaturesUpdate(
+	update *githubclient.RepositoryUpdate,
+	features *githubv1alpha1.RepositoryFeatures,
+	remote *githubclient.Repository,
+) {
+	if features == nil {
+		return
+	}
+	if features.Issues != nil && remote.HasIssues != *features.Issues {
+		update.HasIssues = features.Issues
+	}
+	if features.Projects != nil && remote.HasProjects != *features.Projects {
+		update.HasProjects = features.Projects
+	}
+	if features.Wiki != nil && remote.HasWiki != *features.Wiki {
+		update.HasWiki = features.Wiki
+	}
+	if features.Discussions != nil && remote.HasDiscussions != *features.Discussions {
+		update.HasDiscussions = features.Discussions
+	}
+}
+
+func applyRepositoryMergeOptionsUpdate(
+	update *githubclient.RepositoryUpdate,
+	merge *githubv1alpha1.RepositoryMergeOptions,
+	remote *githubclient.Repository,
+) {
+	if merge == nil {
+		return
+	}
+	if merge.AllowAutoMerge != nil && remote.AllowAutoMerge != *merge.AllowAutoMerge {
+		update.AllowAutoMerge = merge.AllowAutoMerge
+	}
+	if merge.AllowMergeCommit != nil && remote.AllowMergeCommit != *merge.AllowMergeCommit {
+		update.AllowMergeCommit = merge.AllowMergeCommit
+	}
+	if merge.AllowRebaseMerge != nil && remote.AllowRebaseMerge != *merge.AllowRebaseMerge {
+		update.AllowRebaseMerge = merge.AllowRebaseMerge
+	}
+	if merge.AllowSquashMerge != nil && remote.AllowSquashMerge != *merge.AllowSquashMerge {
+		update.AllowSquashMerge = merge.AllowSquashMerge
+	}
+	if merge.MergeCommitTitle != nil &&
+		remote.MergeCommitTitle != string(*merge.MergeCommitTitle) {
+		value := string(*merge.MergeCommitTitle)
+		update.MergeCommitTitle = &value
+	}
+	if merge.MergeCommitMessage != nil &&
+		remote.MergeCommitMessage != string(*merge.MergeCommitMessage) {
+		value := string(*merge.MergeCommitMessage)
+		update.MergeCommitMessage = &value
+	}
+	if merge.SquashMergeCommitTitle != nil &&
+		remote.SquashMergeCommitTitle != string(*merge.SquashMergeCommitTitle) {
+		value := string(*merge.SquashMergeCommitTitle)
+		update.SquashMergeCommitTitle = &value
+	}
+	if merge.SquashMergeCommitMessage != nil &&
+		remote.SquashMergeCommitMessage != string(*merge.SquashMergeCommitMessage) {
+		value := string(*merge.SquashMergeCommitMessage)
+		update.SquashMergeCommitMessage = &value
+	}
 }
 
 func normalizeRepositoryTopics(topics []string) []string {
@@ -409,6 +525,35 @@ func (r *GitHubRepositoryReconciler) reconcileDelete(
 			return result, nil
 		}
 		return ctrl.Result{}, fmt.Errorf("resolve provider for deletion: %w", err)
+	}
+
+	if repository.Spec.EffectiveDeletionPolicy() == githubv1alpha1.RepositoryDeletionPolicyArchive {
+		logger.Info(
+			"archiving GitHub repository before removing finalizer",
+			"providerConfig", provider.Name,
+			"organization", provider.Spec.Organization,
+		)
+		_, err = repositoryClient.ArchiveRepository(
+			ctx,
+			provider.Spec.Organization,
+			repository.Spec.Name,
+		)
+		if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+			if result, ok := githubDeferredResult(err); ok {
+				return result, nil
+			}
+			return ctrl.Result{}, fmt.Errorf(
+				"archive GitHub repository %s/%s: %w",
+				provider.Spec.Organization,
+				repository.Spec.Name,
+				err,
+			)
+		}
+		controllerutil.RemoveFinalizer(repository, githubRepositoryFinalizer)
+		if err := r.Update(ctx, repository); err != nil {
+			return ctrl.Result{}, fmt.Errorf("remove GitHubRepository finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	logger.Info(
@@ -475,6 +620,20 @@ func (r *GitHubRepositoryReconciler) setReadyCondition(
 			Wiki:        remoteRepository.HasWiki,
 			Discussions: remoteRepository.HasDiscussions,
 		}
+		repository.Status.DeleteBranchOnMerge = remoteRepository.DeleteBranchOnMerge
+		repository.Status.VulnerabilityAlerts = copyBoolPointer(remoteRepository.VulnerabilityAlerts)
+		repository.Status.IsTemplate = remoteRepository.IsTemplate
+		repository.Status.Archived = remoteRepository.Archived
+		repository.Status.MergeOptions = &githubv1alpha1.RepositoryMergeOptionsStatus{
+			AllowAutoMerge:           remoteRepository.AllowAutoMerge,
+			AllowMergeCommit:         remoteRepository.AllowMergeCommit,
+			AllowRebaseMerge:         remoteRepository.AllowRebaseMerge,
+			AllowSquashMerge:         remoteRepository.AllowSquashMerge,
+			MergeCommitTitle:         githubv1alpha1.RepositoryMergeCommitTitle(remoteRepository.MergeCommitTitle),
+			MergeCommitMessage:       githubv1alpha1.RepositoryMergeCommitMessage(remoteRepository.MergeCommitMessage),
+			SquashMergeCommitTitle:   githubv1alpha1.RepositorySquashMergeCommitTitle(remoteRepository.SquashMergeCommitTitle),
+			SquashMergeCommitMessage: githubv1alpha1.RepositorySquashMergeCommitMessage(remoteRepository.SquashMergeCommitMessage),
+		}
 	}
 	repository.Status.ObservedGeneration = repository.Generation
 
@@ -491,6 +650,14 @@ func (r *GitHubRepositoryReconciler) setReadyCondition(
 	}
 
 	return r.Status().Update(ctx, repository)
+}
+
+func copyBoolPointer(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	copy := *value
+	return &copy
 }
 
 // SetupWithManager sets up the controller with the Manager.

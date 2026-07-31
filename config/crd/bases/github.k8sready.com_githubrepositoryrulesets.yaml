@@ -65,13 +65,18 @@ spec:
                   BypassActors lists actors that may bypass the ruleset. Omit the field to leave
                   bypass actors unmanaged, or set an empty list to remove all bypass actors.
                 items:
-                  description: GitHubRulesetBypassActor defines an actor that can
-                    bypass a ruleset.
+                  description: |-
+                    GitHubRulesetBypassActor defines an actor that can bypass a ruleset.
+
+                    Team and User actors may use a stable human-readable identifier instead of
+                    looking up GitHub's numeric actor ID manually. actorID remains supported for
+                    backward compatibility and for actor types without a name resolver.
                   properties:
                     actorID:
                       description: |-
-                        ActorID is required for Integration, RepositoryRole, Team, and User.
-                        It is ignored for OrganizationAdmin and must be null for DeployKey.
+                        ActorID is the numeric GitHub actor ID. It may be used for Team and User
+                        instead of teamSlug or username, and is required for Integration and
+                        RepositoryRole. It must be omitted for OrganizationAdmin and DeployKey.
                       format: int64
                       minimum: 1
                       type: integer
@@ -93,15 +98,38 @@ spec:
                       - pull_request
                       - exempt
                       type: string
+                    teamSlug:
+                      description: |-
+                        TeamSlug identifies a team in the provider organization. It is resolved
+                        to GitHub's numeric team ID before the ruleset request is sent.
+                      minLength: 1
+                      type: string
+                    username:
+                      description: |-
+                        Username identifies a GitHub user by login. It is resolved to GitHub's
+                        numeric user ID before the ruleset request is sent.
+                      minLength: 1
+                      type: string
                   required:
                   - actorType
                   type: object
                   x-kubernetes-validations:
-                  - message: actorID is required for Integration, RepositoryRole,
-                      Team and User, and must be omitted for OrganizationAdmin and
-                      DeployKey
-                    rule: '(self.actorType in [''Integration'', ''RepositoryRole'',
-                      ''Team'', ''User'']) ? has(self.actorID) : !has(self.actorID)'
+                  - message: Team requires exactly one of actorID or teamSlug, and
+                      username must be omitted
+                    rule: self.actorType != 'Team' || (has(self.actorID) != has(self.teamSlug))
+                      && !has(self.username)
+                  - message: User requires exactly one of actorID or username, and
+                      teamSlug must be omitted
+                    rule: self.actorType != 'User' || (has(self.actorID) != has(self.username))
+                      && !has(self.teamSlug)
+                  - message: Integration and RepositoryRole require actorID and do
+                      not accept teamSlug or username
+                    rule: '!(self.actorType in [''Integration'', ''RepositoryRole''])
+                      || has(self.actorID) && !has(self.teamSlug) && !has(self.username)'
+                  - message: OrganizationAdmin and DeployKey do not accept actorID,
+                      teamSlug, or username
+                    rule: '!(self.actorType in [''OrganizationAdmin'', ''DeployKey''])
+                      || !has(self.actorID) && !has(self.teamSlug) && !has(self.username)'
                 type: array
               conditions:
                 description: |-

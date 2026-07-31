@@ -99,13 +99,33 @@ const (
 )
 
 // GitHubRulesetBypassActor defines an actor that can bypass a ruleset.
-// +kubebuilder:validation:XValidation:rule="(self.actorType in ['Integration', 'RepositoryRole', 'Team', 'User']) ? has(self.actorID) : !has(self.actorID)",message="actorID is required for Integration, RepositoryRole, Team and User, and must be omitted for OrganizationAdmin and DeployKey"
+//
+// Team and User actors may use a stable human-readable identifier instead of
+// looking up GitHub's numeric actor ID manually. actorID remains supported for
+// backward compatibility and for actor types without a name resolver.
+// +kubebuilder:validation:XValidation:rule="self.actorType != 'Team' || (has(self.actorID) != has(self.teamSlug)) && !has(self.username)",message="Team requires exactly one of actorID or teamSlug, and username must be omitted"
+// +kubebuilder:validation:XValidation:rule="self.actorType != 'User' || (has(self.actorID) != has(self.username)) && !has(self.teamSlug)",message="User requires exactly one of actorID or username, and teamSlug must be omitted"
+// +kubebuilder:validation:XValidation:rule="!(self.actorType in ['Integration', 'RepositoryRole']) || has(self.actorID) && !has(self.teamSlug) && !has(self.username)",message="Integration and RepositoryRole require actorID and do not accept teamSlug or username"
+// +kubebuilder:validation:XValidation:rule="!(self.actorType in ['OrganizationAdmin', 'DeployKey']) || !has(self.actorID) && !has(self.teamSlug) && !has(self.username)",message="OrganizationAdmin and DeployKey do not accept actorID, teamSlug, or username"
 type GitHubRulesetBypassActor struct {
-	// ActorID is required for Integration, RepositoryRole, Team, and User.
-	// It is ignored for OrganizationAdmin and must be null for DeployKey.
+	// ActorID is the numeric GitHub actor ID. It may be used for Team and User
+	// instead of teamSlug or username, and is required for Integration and
+	// RepositoryRole. It must be omitted for OrganizationAdmin and DeployKey.
 	// +kubebuilder:validation:Minimum=1
 	// +optional
 	ActorID *int64 `json:"actorID,omitempty"`
+
+	// TeamSlug identifies a team in the provider organization. It is resolved
+	// to GitHub's numeric team ID before the ruleset request is sent.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	TeamSlug string `json:"teamSlug,omitempty"`
+
+	// Username identifies a GitHub user by login. It is resolved to GitHub's
+	// numeric user ID before the ruleset request is sent.
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Username string `json:"username,omitempty"`
 
 	// ActorType is the GitHub actor type.
 	ActorType GitHubRulesetBypassActorType `json:"actorType"`

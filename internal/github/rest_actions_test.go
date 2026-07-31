@@ -96,7 +96,7 @@ func TestRepositoryActionsSecretEndpoints(t *testing.T) {
 	}
 	target := ActionsTarget{
 		Scope:        ActionsTargetScopeRepository,
-		Organization: "k8sready",
+		Organization: rulesetActorTestOrganization,
 		Repository:   "example",
 	}
 	key, err := client.GetActionsPublicKey(context.Background(), target)
@@ -153,7 +153,7 @@ func TestEnvironmentAndOrganizationVariableEndpoints(t *testing.T) {
 		t.Fatalf("create client: %v", err)
 	}
 	environment, err := client.UpsertEnvironment(
-		context.Background(), "k8sready", "example", "production",
+		context.Background(), rulesetActorTestOrganization, "example", "production",
 	)
 	if err != nil {
 		t.Fatalf("upsert environment: %v", err)
@@ -165,7 +165,7 @@ func TestEnvironmentAndOrganizationVariableEndpoints(t *testing.T) {
 	visibility := "selected"
 	if err := client.CreateActionsVariable(
 		context.Background(),
-		ActionsTarget{Scope: ActionsTargetScopeOrganization, Organization: "k8sready"},
+		ActionsTarget{Scope: ActionsTargetScopeOrganization, Organization: rulesetActorTestOrganization},
 		ActionsVariableUpsert{
 			Name:                  "CLOUD_REGION",
 			Value:                 "eu-west-1",

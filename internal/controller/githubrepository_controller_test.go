@@ -35,11 +35,15 @@ import (
 )
 
 type fakeRepositoryClient struct {
-	repositories map[string]*githubclient.Repository
-	createCalls  int
-	updateCalls  int
-	topicCalls   int
-	deleteCalls  int
+	repositories      map[string]*githubclient.Repository
+	createCalls       int
+	updateCalls       int
+	topicCalls        int
+	vulnerabilityGets int
+	vulnerabilitySets int
+	archiveCalls      int
+	deleteCalls       int
+	lastCreateInput   githubclient.RepositoryCreate
 }
 
 type fakeRepositoryClientFactory struct {
@@ -106,26 +110,24 @@ func (f *fakeRepositoryClient) GetRepository(
 func (f *fakeRepositoryClient) CreateRepository(
 	_ context.Context,
 	organization string,
-	name string,
-	private bool,
+	input githubclient.RepositoryCreate,
 ) (*githubclient.Repository, error) {
 	f.createCalls++
-
-	visibility := "public"
-	if private {
-		visibility = string(githubv1alpha1.RepositoryVisibilityPrivate)
-	}
+	f.lastCreateInput = input
 
 	repository := &githubclient.Repository{
-		ID:             int64(f.createCalls),
-		HTMLURL:        fmt.Sprintf("https://github.com/%s/%s", organization, name),
-		Visibility:     visibility,
-		HasIssues:      true,
-		HasProjects:    true,
-		HasWiki:        true,
-		HasDiscussions: false,
+		ID:               int64(f.createCalls),
+		HTMLURL:          fmt.Sprintf("https://github.com/%s/%s", organization, input.Name),
+		Visibility:       input.Visibility,
+		HasIssues:        true,
+		HasProjects:      true,
+		HasWiki:          true,
+		HasDiscussions:   false,
+		AllowMergeCommit: true,
+		AllowRebaseMerge: true,
+		AllowSquashMerge: true,
 	}
-	f.repositories[organization+"/"+name] = repository
+	f.repositories[organization+"/"+input.Name] = repository
 
 	copy := *repository
 	return &copy, nil
@@ -165,6 +167,39 @@ func (f *fakeRepositoryClient) UpdateRepository(
 	if update.HasDiscussions != nil {
 		repository.HasDiscussions = *update.HasDiscussions
 	}
+	if update.DeleteBranchOnMerge != nil {
+		repository.DeleteBranchOnMerge = *update.DeleteBranchOnMerge
+	}
+	if update.IsTemplate != nil {
+		repository.IsTemplate = *update.IsTemplate
+	}
+	if update.AllowAutoMerge != nil {
+		repository.AllowAutoMerge = *update.AllowAutoMerge
+	}
+	if update.AllowMergeCommit != nil {
+		repository.AllowMergeCommit = *update.AllowMergeCommit
+	}
+	if update.AllowRebaseMerge != nil {
+		repository.AllowRebaseMerge = *update.AllowRebaseMerge
+	}
+	if update.AllowSquashMerge != nil {
+		repository.AllowSquashMerge = *update.AllowSquashMerge
+	}
+	if update.MergeCommitTitle != nil {
+		repository.MergeCommitTitle = *update.MergeCommitTitle
+	}
+	if update.MergeCommitMessage != nil {
+		repository.MergeCommitMessage = *update.MergeCommitMessage
+	}
+	if update.SquashMergeCommitTitle != nil {
+		repository.SquashMergeCommitTitle = *update.SquashMergeCommitTitle
+	}
+	if update.SquashMergeCommitMessage != nil {
+		repository.SquashMergeCommitMessage = *update.SquashMergeCommitMessage
+	}
+	if update.Archived != nil {
+		repository.Archived = *update.Archived
+	}
 
 	copy := *repository
 	copy.Topics = append([]string(nil), repository.Topics...)
@@ -186,6 +221,52 @@ func (f *fakeRepositoryClient) ReplaceRepositoryTopics(
 	f.topicCalls++
 	repository.Topics = append([]string(nil), topics...)
 	return append([]string(nil), repository.Topics...), nil
+}
+
+func (f *fakeRepositoryClient) GetRepositoryVulnerabilityAlerts(
+	_ context.Context,
+	organization string,
+	name string,
+) (bool, error) {
+	f.vulnerabilityGets++
+	repository, ok := f.repositories[organization+"/"+name]
+	if !ok {
+		return false, githubclient.ErrNotFound
+	}
+	if repository.VulnerabilityAlerts == nil {
+		return false, nil
+	}
+	return *repository.VulnerabilityAlerts, nil
+}
+
+func (f *fakeRepositoryClient) SetRepositoryVulnerabilityAlerts(
+	_ context.Context,
+	organization string,
+	name string,
+	enabled bool,
+) error {
+	f.vulnerabilitySets++
+	repository, ok := f.repositories[organization+"/"+name]
+	if !ok {
+		return githubclient.ErrNotFound
+	}
+	repository.VulnerabilityAlerts = repositoryBoolPtr(enabled)
+	return nil
+}
+
+func (f *fakeRepositoryClient) ArchiveRepository(
+	_ context.Context,
+	organization string,
+	name string,
+) (*githubclient.Repository, error) {
+	f.archiveCalls++
+	repository, ok := f.repositories[organization+"/"+name]
+	if !ok {
+		return nil, githubclient.ErrNotFound
+	}
+	repository.Archived = true
+	copy := *repository
+	return &copy, nil
 }
 
 func (f *fakeRepositoryClient) DeleteRepository(
@@ -322,7 +403,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			Expect(resource.Status.ProviderConfigRef).To(Equal(providerName))
 			Expect(resource.Status.Organization).To(Equal(testOrganization))
 			Expect(resource.Status.RepositoryID).To(Equal(int64(1)))
-			Expect(resource.Status.URL).To(Equal("https://github.com/k8sready/test-resource"))
+			Expect(resource.Status.URL).To(Equal(testRepositoryHTMLURL))
 			Expect(resource.Status.Visibility).To(Equal(githubv1alpha1.RepositoryVisibilityPrivate))
 			Expect(resource.Status.ObservedGeneration).To(Equal(resource.Generation))
 
@@ -399,7 +480,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			fakeGitHubClient := newFakeRepositoryClient()
 			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
 				ID:             43,
-				HTMLURL:        "https://github.com/k8sready/test-resource",
+				HTMLURL:        testRepositoryHTMLURL,
 				Visibility:     string(githubv1alpha1.RepositoryVisibilityPrivate),
 				Description:    "old description",
 				Homepage:       "https://old.example.com",
@@ -471,7 +552,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 			fakeGitHubClient := newFakeRepositoryClient()
 			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
 				ID:             42,
-				HTMLURL:        "https://github.com/k8sready/test-resource",
+				HTMLURL:        testRepositoryHTMLURL,
 				Visibility:     "public",
 				Description:    "existing description",
 				Homepage:       "https://existing.example.com",
@@ -526,6 +607,105 @@ var _ = Describe("GitHubRepository Controller", func() {
 			readyCondition := meta.FindStatusCondition(resource.Status.Conditions, conditionTypeReady)
 			Expect(readyCondition).NotTo(BeNil())
 			Expect(readyCondition.Reason).To(Equal("RepositoryAvailable"))
+		})
+
+		It("should manage optional repository settings without changing omitted fields", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeGitHubClient.repositories["k8sready/test-resource"] = &githubclient.Repository{
+				ID:                       44,
+				HTMLURL:                  testRepositoryHTMLURL,
+				Visibility:               string(githubv1alpha1.RepositoryVisibilityInternal),
+				DeleteBranchOnMerge:      false,
+				IsTemplate:               false,
+				AllowAutoMerge:           false,
+				AllowMergeCommit:         true,
+				AllowRebaseMerge:         true,
+				AllowSquashMerge:         true,
+				MergeCommitTitle:         "MERGE_MESSAGE",
+				MergeCommitMessage:       "PR_TITLE",
+				SquashMergeCommitTitle:   "PR_TITLE",
+				SquashMergeCommitMessage: "BLANK",
+				VulnerabilityAlerts:      repositoryBoolPtr(false),
+			}
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Visibility = repositoryVisibilityPtr(githubv1alpha1.RepositoryVisibilityInternal)
+			resource.Spec.DeleteBranchOnMerge = repositoryBoolPtr(true)
+			resource.Spec.VulnerabilityAlerts = repositoryBoolPtr(true)
+			resource.Spec.IsTemplate = repositoryBoolPtr(true)
+			allowMergeCommit := false
+			mergeTitle := githubv1alpha1.RepositoryMergeCommitTitlePRTitle
+			squashTitle := githubv1alpha1.RepositorySquashMergeCommitTitleCommitOrPRTitle
+			resource.Spec.MergeOptions = &githubv1alpha1.RepositoryMergeOptions{
+				AllowMergeCommit:       &allowMergeCommit,
+				MergeCommitTitle:       &mergeTitle,
+				SquashMergeCommitTitle: &squashTitle,
+			}
+			resource.Spec.DeletionPolicy = githubv1alpha1.RepositoryDeletionPolicyOrphan
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+
+			remote := fakeGitHubClient.repositories["k8sready/test-resource"]
+			Expect(remote.DeleteBranchOnMerge).To(BeTrue())
+			Expect(remote.IsTemplate).To(BeTrue())
+			Expect(remote.AllowMergeCommit).To(BeFalse())
+			Expect(remote.AllowRebaseMerge).To(BeTrue())
+			Expect(remote.MergeCommitTitle).To(Equal("PR_TITLE"))
+			Expect(remote.SquashMergeCommitTitle).To(Equal("COMMIT_OR_PR_TITLE"))
+			Expect(fakeGitHubClient.vulnerabilityGets).To(Equal(1))
+			Expect(fakeGitHubClient.vulnerabilitySets).To(Equal(1))
+			Expect(*remote.VulnerabilityAlerts).To(BeTrue())
+		})
+
+		It("should create from a template and archive on deletion", func() {
+			fakeGitHubClient := newFakeRepositoryClient()
+			fakeFactory := &fakeRepositoryClientFactory{client: fakeGitHubClient}
+			controllerReconciler := &GitHubRepositoryReconciler{
+				Client:              k8sClient,
+				APIReader:           k8sClient,
+				Scheme:              k8sClient.Scheme(),
+				GitHubClientFactory: fakeFactory,
+			}
+			request := reconcile.Request{NamespacedName: typeNamespacedName}
+
+			resource := &githubv1alpha1.GitHubRepository{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			resource.Spec.Template = &githubv1alpha1.RepositoryTemplate{
+				Owner:              "k8sready",
+				Repository:         "service-template",
+				IncludeAllBranches: true,
+			}
+			resource.Spec.DeletionPolicy = githubv1alpha1.RepositoryDeletionPolicyArchive
+			Expect(k8sClient.Update(ctx, resource)).To(Succeed())
+
+			_, err := controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakeGitHubClient.lastCreateInput.Template).NotTo(BeNil())
+			Expect(fakeGitHubClient.lastCreateInput.Template.Repository).To(Equal("service-template"))
+			Expect(fakeGitHubClient.lastCreateInput.Template.IncludeAllBranches).To(BeTrue())
+
+			Expect(k8sClient.Get(ctx, typeNamespacedName, resource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			_, err = controllerReconciler.Reconcile(ctx, request)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fakeGitHubClient.archiveCalls).To(Equal(1))
+			Expect(fakeGitHubClient.deleteCalls).To(Equal(0))
+			Expect(fakeGitHubClient.repositories["k8sready/test-resource"].Archived).To(BeTrue())
 		})
 
 		It("should stop remote reconciliation while the provider is suspended", func() {

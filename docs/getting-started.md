@@ -175,6 +175,10 @@ spec:
   name: protect-main
   target: branch
   enforcement: disabled
+  bypassActors:
+    - actorType: Team
+      teamSlug: platform
+      bypassMode: always
   conditions:
     refName:
       include:
@@ -202,6 +206,11 @@ kubectl patch ghruleset example-repository-protect-main \
   --type merge \
   -p '{"spec":{"enforcement":"active"}}'
 ```
+
+The operator resolves team slugs and usernames to numeric GitHub actor IDs. A
+GitHub App or fine-grained token using `teamSlug` needs organization
+`Members: read` permission in addition to the permissions required to manage
+rulesets. Classic personal access tokens need `read:org`. Existing `actorID` manifests remain valid.
 
 GitHub may return `403` when the repository or organization plan does not
 support rulesets. Testing against a disposable repository is recommended.

@@ -88,7 +88,12 @@ func (r *GitHubRepositoryRulesetReconciler) Reconcile(
 		return r.fail(ctx, &resource, nil, dependencyFailureReason(err), err)
 	}
 
-	desired, err := desiredRepositoryRuleset(resource.Spec)
+	resolvedSpec, err := resolveRepositoryRulesetBypassActors(ctx, resource.Spec, resolved)
+	if err != nil {
+		return r.fail(ctx, &resource, resolved, "BypassActorUnavailable", err)
+	}
+
+	desired, err := desiredRepositoryRuleset(resolvedSpec)
 	if err != nil {
 		return r.fail(ctx, &resource, resolved, "InvalidDesiredState", err)
 	}
@@ -156,6 +161,101 @@ type resolvedRepositoryRuleset struct {
 	Repository *githubv1alpha1.GitHubRepository
 	Provider   *githubv1alpha1.GitHubProviderConfig
 	Client     githubclient.RepositoryRulesetClient
+}
+
+func resolveRepositoryRulesetBypassActors(
+	ctx context.Context,
+	spec githubv1alpha1.GitHubRepositoryRulesetSpec,
+	resolved *resolvedRepositoryRuleset,
+) (githubv1alpha1.GitHubRepositoryRulesetSpec, error) {
+	if spec.BypassActors == nil {
+		return spec, nil
+	}
+
+	actors := make([]githubv1alpha1.GitHubRulesetBypassActor, len(spec.BypassActors))
+	for i := range spec.BypassActors {
+		actor, err := resolveRepositoryRulesetBypassActor(ctx, spec.BypassActors[i], resolved)
+		if err != nil {
+			return githubv1alpha1.GitHubRepositoryRulesetSpec{}, fmt.Errorf(
+				"resolve bypass actor at index %d: %w",
+				i,
+				err,
+			)
+		}
+		actors[i] = actor
+	}
+
+	spec.BypassActors = actors
+	return spec, nil
+}
+
+func resolveRepositoryRulesetBypassActor(
+	ctx context.Context,
+	actor githubv1alpha1.GitHubRulesetBypassActor,
+	resolved *resolvedRepositoryRuleset,
+) (githubv1alpha1.GitHubRulesetBypassActor, error) {
+	hasActorID := actor.ActorID != nil
+	hasTeamSlug := actor.TeamSlug != ""
+	hasUsername := actor.Username != ""
+	actor.ActorID = copyInt64Pointer(actor.ActorID)
+
+	switch actor.ActorType {
+	case githubv1alpha1.GitHubRulesetBypassActorTeam:
+		if hasUsername || hasActorID == hasTeamSlug {
+			return actor, errors.New(
+				"team requires exactly one of actorID or teamSlug, and username must be omitted",
+			)
+		}
+		if hasTeamSlug {
+			actorID, err := resolved.Client.GetTeamIDBySlug(
+				ctx,
+				resolved.Provider.Spec.Organization,
+				actor.TeamSlug,
+			)
+			if err != nil {
+				return actor, fmt.Errorf(
+					"get GitHub team %q in organization %q: %w",
+					actor.TeamSlug,
+					resolved.Provider.Spec.Organization,
+					err,
+				)
+			}
+			actor.ActorID = &actorID
+		}
+	case githubv1alpha1.GitHubRulesetBypassActorUser:
+		if hasTeamSlug || hasActorID == hasUsername {
+			return actor, errors.New(
+				"user requires exactly one of actorID or username, and teamSlug must be omitted",
+			)
+		}
+		if hasUsername {
+			actorID, err := resolved.Client.GetUserIDByUsername(ctx, actor.Username)
+			if err != nil {
+				return actor, fmt.Errorf("get GitHub user %q: %w", actor.Username, err)
+			}
+			actor.ActorID = &actorID
+		}
+	case githubv1alpha1.GitHubRulesetBypassActorIntegration,
+		githubv1alpha1.GitHubRulesetBypassActorRepositoryRole:
+		if !hasActorID || hasTeamSlug || hasUsername {
+			return actor, fmt.Errorf(
+				"%s requires actorID and does not accept teamSlug or username",
+				actor.ActorType,
+			)
+		}
+	case githubv1alpha1.GitHubRulesetBypassActorOrganizationAdmin,
+		githubv1alpha1.GitHubRulesetBypassActorDeployKey:
+		if hasActorID || hasTeamSlug || hasUsername {
+			return actor, fmt.Errorf(
+				"%s does not accept actorID, teamSlug, or username",
+				actor.ActorType,
+			)
+		}
+	default:
+		return actor, fmt.Errorf("unsupported bypass actor type %q", actor.ActorType)
+	}
+
+	return actor, nil
 }
 
 func (r *GitHubRepositoryRulesetReconciler) resolve(

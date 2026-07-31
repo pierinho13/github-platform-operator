@@ -1,0 +1,46 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "github-platform-operator.fullname" . }}-rulesets
+rules:
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubrepositoryrulesets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubrepositoryrulesets/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - github.k8sready.com
+    resources:
+      - githubrepositoryrulesets/finalizers
+    verbs:
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "github-platform-operator.fullname" . }}-rulesets
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "github-platform-operator.fullname" . }}-rulesets
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "github-platform-operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

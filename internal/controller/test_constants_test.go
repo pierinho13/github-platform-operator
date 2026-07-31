@@ -17,7 +17,8 @@ limitations under the License.
 package controller
 
 const (
-	testDefaultName  = "default"
-	testTokenKey     = "token"
-	testOrganization = "k8sready"
+	testDefaultName       = "default"
+	testTokenKey          = "token"
+	testOrganization      = "k8sready"
+	testRepositoryHTMLURL = "https://github.com/k8sready/test-resource"
 )
