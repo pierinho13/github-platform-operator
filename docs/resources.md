@@ -7,15 +7,18 @@ apiVersion: github.k8sready.com/v1alpha1
 ```
 
 `GitHubProviderConfig` is cluster-scoped. The remaining resources are
-namespaced. References to repositories, environments and Kubernetes Secrets
-resolve within the same namespace unless the field explicitly contains a
-namespace.
+namespaced. References to repositories, teams, environments and Kubernetes
+Secrets resolve within the same namespace unless the field explicitly contains
+a namespace.
 
 ## Short names
 
 | Kind | Short name |
 |---|---|
 | `GitHubProviderConfig` | `ghprovider` |
+| `GitHubOrganizationMember` | `ghorgmember` |
+| `GitHubTeam` | `ghteam` |
+| `GitHubTeamMembership` | `ghteammember` |
 | `GitHubRepository` | `ghrepo` |
 | `GitHubRepositoryRuleset` | `ghruleset` |
 | `GitHubRepositoryTeamAccess` | `ghteamaccess` |
@@ -75,7 +78,8 @@ resumed, except that resources using an `Orphan` deletion policy can still
 remove their finalizer without remote cleanup.
 
 The provider cannot be deleted while it is referenced by managed repositories,
-repository rulesets or organization-scoped Actions resources.
+repository rulesets, organization members, teams or organization-scoped Actions
+resources.
 
 ## `GitHubRepository`
 
@@ -102,6 +106,17 @@ spec:
     projects: false
     wiki: false
     discussions: true
+  autoInit: true
+  deleteBranchOnMerge: true
+  vulnerabilityAlerts: true
+  isTemplate: false
+  mergeOptions:
+    allowAutoMerge: true
+    allowMergeCommit: false
+    allowRebaseMerge: false
+    allowSquashMerge: true
+    squashMergeCommitTitle: COMMIT_OR_PR_TITLE
+    squashMergeCommitMessage: COMMIT_MESSAGES
   deletionPolicy: Orphan
 ```
 
@@ -111,13 +126,39 @@ Optional settings follow safe adoption semantics:
 - explicitly configured field: reconcile it
 - `description: ""` or `homepage: ""`: clear it
 - `topics: []`: remove all topics
+- `visibility: internal`: require GitHub Enterprise
+- `autoInit` and `template`: creation-only and mutually exclusive
+
+Create a repository from a GitHub template with:
+
+```yaml
+spec:
+  providerConfigRef: default
+  name: payments-worker
+  visibility: private
+  template:
+    owner: k8sready
+    repository: service-template
+    includeAllBranches: false
+  deletionPolicy: Orphan
+```
+
+The supported merge format values are:
+
+| Field | Values |
+|---|---|
+| `mergeCommitTitle` | `PR_TITLE`, `MERGE_MESSAGE` |
+| `mergeCommitMessage` | `PR_BODY`, `PR_TITLE`, `BLANK` |
+| `squashMergeCommitTitle` | `PR_TITLE`, `COMMIT_OR_PR_TITLE` |
+| `squashMergeCommitMessage` | `PR_BODY`, `COMMIT_MESSAGES`, `BLANK` |
 
 Repository deletion policies:
 
 | Policy | Result |
 |---|---|
 | `Orphan` | Keep the GitHub repository |
-| `Delete` | Delete the GitHub repository |
+| `Archive` | Archive the GitHub repository |
+| `Delete` | Permanently delete the GitHub repository |
 
 `Orphan` is the default.
 
@@ -255,6 +296,99 @@ Ruleset deletion policies:
 
 `Orphan` is the default. GitHub may reject ruleset operations with `403` when
 the selected repository or organization plan does not support the feature.
+
+## Organization membership and teams
+
+These resources require GitHub organization `Members: write` permission.
+Classic personal access tokens need an organization scope that permits member
+and team administration.
+
+### `GitHubOrganizationMember`
+
+Creates or updates direct organization membership.
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubOrganizationMember
+metadata:
+  name: octocat
+  namespace: default
+spec:
+  providerConfigRef: default
+  username: octocat
+  role: member
+  deletionPolicy: Orphan
+```
+
+Supported organization roles are `member` and `admin`. GitHub may report a new
+member as `InvitationPending` until the user accepts the organization
+invitation.
+
+Membership deletion policies:
+
+| Policy | Result |
+|---|---|
+| `Orphan` | Keep the organization membership |
+| `Revoke` | Remove the user from the organization |
+
+### `GitHubTeam`
+
+Creates a team or adopts an existing team with the same name.
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubTeam
+metadata:
+  name: platform
+  namespace: default
+spec:
+  providerConfigRef: default
+  name: Platform
+  description: Platform engineering team
+  privacy: closed
+  deletionPolicy: Orphan
+```
+
+Supported privacy values are `closed` and `secret`. When privacy is omitted, new
+teams use `closed`; adopted teams keep their current value. A team configured
+with `Delete` remains protected while a managed `GitHubTeamMembership`
+references it.
+
+Team deletion policies:
+
+| Policy | Result |
+|---|---|
+| `Orphan` | Keep the GitHub team |
+| `Delete` | Delete the GitHub team |
+
+### `GitHubTeamMembership`
+
+Assigns a GitHub user to a managed team.
+
+```yaml
+apiVersion: github.k8sready.com/v1alpha1
+kind: GitHubTeamMembership
+metadata:
+  name: platform-octocat
+  namespace: default
+spec:
+  teamRef:
+    name: platform
+  username: octocat
+  role: maintainer
+  deletionPolicy: Orphan
+```
+
+Supported team roles are `member` and `maintainer`. Membership can remain in
+`InvitationPending` while the user has not accepted the organization
+invitation.
+
+Team membership deletion policies:
+
+| Policy | Result |
+|---|---|
+| `Orphan` | Keep the team membership |
+| `Revoke` | Remove the user from the team |
 
 ## Repository access
 

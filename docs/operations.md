@@ -6,7 +6,7 @@ List all managed resources:
 
 ```bash
 kubectl get \
-  ghprovider,ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
+  ghprovider,ghorgmember,ghteam,ghteammember,ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
   -A
 ```
 
@@ -26,8 +26,15 @@ RulesetCreated
 RulesetUpdated
 RulesetAvailable
 BypassActorUnavailable
-AccessConfigured
+OrganizationMembershipConfigured
+OrganizationMembershipUpdated
+TeamCreated
+TeamUpdated
+TeamAvailable
+TeamMembershipConfigured
+TeamMembershipUpdated
 InvitationPending
+AccessConfigured
 EnvironmentCreated
 SecretCreated
 SecretUpdated
@@ -51,9 +58,12 @@ kubectl logs -f \
 
 The default policy is non-destructive.
 
-| Resource | Safe default | Destructive option |
+| Resource | Safe default | Explicit remote action |
 |---|---|---|
-| `GitHubRepository` | `Orphan` | `Delete` |
+| `GitHubRepository` | `Orphan` | `Archive`, `Delete` |
+| `GitHubOrganizationMember` | `Orphan` | `Revoke` |
+| `GitHubTeam` | `Orphan` | `Delete` |
+| `GitHubTeamMembership` | `Orphan` | `Revoke` |
 | `GitHubRepositoryRuleset` | `Orphan` | `Delete` |
 | `GitHubRepositoryTeamAccess` | `Orphan` | `Revoke` |
 | `GitHubRepositoryCollaborator` | `Orphan` | `Revoke` |
@@ -193,7 +203,7 @@ Before deleting CRDs, inspect all finalizers and remote deletion policies:
 
 ```bash
 kubectl get \
-  ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
+  ghorgmember,ghteam,ghteammember,ghrepo,ghruleset,ghteamaccess,ghcollab,ghenv,ghsecret,ghvar \
   -A
 ```
 
@@ -216,7 +226,7 @@ Check referenced resources and namespaces:
 
 ```bash
 kubectl get ghprovider
-kubectl get ghrepo,ghenv -A
+kubectl get ghorgmember,ghteam,ghteammember,ghrepo,ghenv -A
 kubectl get secret -A
 ```
 
@@ -253,6 +263,12 @@ kubectl get ghprovider default -o yaml
 ```
 
 Set `spec.suspended` back to `false` when remote reconciliation should resume.
+
+### Organization or team membership remains pending
+
+The GitHub user must accept the organization invitation. The organization and
+team membership controllers will observe the active membership during a later
+reconciliation.
 
 ### Collaborator remains pending
 
