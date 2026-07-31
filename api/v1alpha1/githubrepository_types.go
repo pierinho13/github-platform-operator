@@ -16,14 +16,13 @@ limitations under the License.
 
 package v1alpha1
 
-import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 const DefaultGitHubProviderConfigName = "default"
 
 // RepositoryVisibility defines the visibility supported by GitHub repositories.
-// +kubebuilder:validation:Enum=public;private
+// Internal visibility requires GitHub Enterprise.
+// +kubebuilder:validation:Enum=public;private;internal
 type RepositoryVisibility string
 
 const (
@@ -32,6 +31,9 @@ const (
 
 	// RepositoryVisibilityPrivate restricts access to authorized users.
 	RepositoryVisibilityPrivate RepositoryVisibility = "private"
+
+	// RepositoryVisibilityInternal makes the repository visible to enterprise members.
+	RepositoryVisibilityInternal RepositoryVisibility = "internal"
 )
 
 // RepositoryFeatures defines optional GitHub repository features managed by the operator.
@@ -62,20 +64,126 @@ type RepositoryFeaturesStatus struct {
 	Discussions bool `json:"discussions"`
 }
 
+// RepositoryTemplate configures creation from an existing GitHub template repository.
+// It is only used when the remote repository does not already exist.
+type RepositoryTemplate struct {
+	// Owner is the user or organization that owns the template repository.
+	// +kubebuilder:validation:MinLength=1
+	Owner string `json:"owner"`
+
+	// Repository is the template repository name.
+	// +kubebuilder:validation:MinLength=1
+	Repository string `json:"repository"`
+
+	// IncludeAllBranches copies every branch instead of only the default branch.
+	// +optional
+	IncludeAllBranches bool `json:"includeAllBranches,omitempty"`
+}
+
+// RepositoryMergeCommitTitle defines the default merge-commit title format.
+// +kubebuilder:validation:Enum=PR_TITLE;MERGE_MESSAGE
+type RepositoryMergeCommitTitle string
+
+const (
+	RepositoryMergeCommitTitlePRTitle      RepositoryMergeCommitTitle = "PR_TITLE"
+	RepositoryMergeCommitTitleMergeMessage RepositoryMergeCommitTitle = "MERGE_MESSAGE"
+)
+
+// RepositoryMergeCommitMessage defines the default merge-commit message format.
+// +kubebuilder:validation:Enum=PR_BODY;PR_TITLE;BLANK
+type RepositoryMergeCommitMessage string
+
+const (
+	RepositoryMergeCommitMessagePRBody  RepositoryMergeCommitMessage = "PR_BODY"
+	RepositoryMergeCommitMessagePRTitle RepositoryMergeCommitMessage = "PR_TITLE"
+	RepositoryMergeCommitMessageBlank   RepositoryMergeCommitMessage = "BLANK"
+)
+
+// RepositorySquashMergeCommitTitle defines the default squash-merge title format.
+// +kubebuilder:validation:Enum=PR_TITLE;COMMIT_OR_PR_TITLE
+type RepositorySquashMergeCommitTitle string
+
+const (
+	RepositorySquashMergeCommitTitlePRTitle         RepositorySquashMergeCommitTitle = "PR_TITLE"
+	RepositorySquashMergeCommitTitleCommitOrPRTitle RepositorySquashMergeCommitTitle = "COMMIT_OR_PR_TITLE"
+)
+
+// RepositorySquashMergeCommitMessage defines the default squash-merge message format.
+// +kubebuilder:validation:Enum=PR_BODY;COMMIT_MESSAGES;BLANK
+type RepositorySquashMergeCommitMessage string
+
+const (
+	RepositorySquashMergeCommitMessagePRBody         RepositorySquashMergeCommitMessage = "PR_BODY"
+	RepositorySquashMergeCommitMessageCommitMessages RepositorySquashMergeCommitMessage = "COMMIT_MESSAGES"
+	RepositorySquashMergeCommitMessageBlank          RepositorySquashMergeCommitMessage = "BLANK"
+)
+
+// RepositoryMergeOptions contains optional pull-request merge settings.
+// Only fields explicitly set inside this object are reconciled.
+type RepositoryMergeOptions struct {
+	// AllowAutoMerge controls whether pull requests can use auto-merge.
+	// +optional
+	AllowAutoMerge *bool `json:"allowAutoMerge,omitempty"`
+
+	// AllowMergeCommit controls whether merge commits are allowed.
+	// +optional
+	AllowMergeCommit *bool `json:"allowMergeCommit,omitempty"`
+
+	// AllowRebaseMerge controls whether rebase merges are allowed.
+	// +optional
+	AllowRebaseMerge *bool `json:"allowRebaseMerge,omitempty"`
+
+	// AllowSquashMerge controls whether squash merges are allowed.
+	// +optional
+	AllowSquashMerge *bool `json:"allowSquashMerge,omitempty"`
+
+	// MergeCommitTitle controls the default title for merge commits.
+	// +optional
+	MergeCommitTitle *RepositoryMergeCommitTitle `json:"mergeCommitTitle,omitempty"`
+
+	// MergeCommitMessage controls the default body for merge commits.
+	// +optional
+	MergeCommitMessage *RepositoryMergeCommitMessage `json:"mergeCommitMessage,omitempty"`
+
+	// SquashMergeCommitTitle controls the default title for squash merges.
+	// +optional
+	SquashMergeCommitTitle *RepositorySquashMergeCommitTitle `json:"squashMergeCommitTitle,omitempty"`
+
+	// SquashMergeCommitMessage controls the default body for squash merges.
+	// +optional
+	SquashMergeCommitMessage *RepositorySquashMergeCommitMessage `json:"squashMergeCommitMessage,omitempty"`
+}
+
+// RepositoryMergeOptionsStatus contains merge settings observed in GitHub.
+type RepositoryMergeOptionsStatus struct {
+	AllowAutoMerge           bool                               `json:"allowAutoMerge"`
+	AllowMergeCommit         bool                               `json:"allowMergeCommit"`
+	AllowRebaseMerge         bool                               `json:"allowRebaseMerge"`
+	AllowSquashMerge         bool                               `json:"allowSquashMerge"`
+	MergeCommitTitle         RepositoryMergeCommitTitle         `json:"mergeCommitTitle,omitempty"`
+	MergeCommitMessage       RepositoryMergeCommitMessage       `json:"mergeCommitMessage,omitempty"`
+	SquashMergeCommitTitle   RepositorySquashMergeCommitTitle   `json:"squashMergeCommitTitle,omitempty"`
+	SquashMergeCommitMessage RepositorySquashMergeCommitMessage `json:"squashMergeCommitMessage,omitempty"`
+}
+
 // RepositoryDeletionPolicy defines what happens to the remote repository when
 // the GitHubRepository custom resource is deleted.
-// +kubebuilder:validation:Enum=Orphan;Delete
+// +kubebuilder:validation:Enum=Orphan;Archive;Delete
 type RepositoryDeletionPolicy string
 
 const (
 	// RepositoryDeletionPolicyOrphan keeps the GitHub repository when the custom resource is deleted.
 	RepositoryDeletionPolicyOrphan RepositoryDeletionPolicy = "Orphan"
 
+	// RepositoryDeletionPolicyArchive archives the GitHub repository when the custom resource is deleted.
+	RepositoryDeletionPolicyArchive RepositoryDeletionPolicy = "Archive"
+
 	// RepositoryDeletionPolicyDelete permanently deletes the GitHub repository with the custom resource.
 	RepositoryDeletionPolicyDelete RepositoryDeletionPolicy = "Delete"
 )
 
 // GitHubRepositorySpec defines the desired state of GitHubRepository.
+// +kubebuilder:validation:XValidation:rule="!(has(self.template) && has(self.autoInit))",message="template and autoInit are mutually exclusive"
 type GitHubRepositorySpec struct {
 	// ProviderConfigRef references the cluster-scoped GitHubProviderConfig.
 	// +kubebuilder:default=default
@@ -96,7 +204,7 @@ type GitHubRepositorySpec struct {
 
 	// Visibility determines whether the operator manages the repository visibility.
 	// When omitted, new repositories are created as private, while existing repositories
-	// keep their current visibility.
+	// keep their current visibility. Internal visibility requires GitHub Enterprise.
 	// +optional
 	Visibility *RepositoryVisibility `json:"visibility,omitempty"`
 
@@ -123,8 +231,37 @@ type GitHubRepositorySpec struct {
 	// +optional
 	Features *RepositoryFeatures `json:"features,omitempty"`
 
-	// DeletionPolicy determines whether deleting the custom resource also deletes
-	// the remote GitHub repository.
+	// AutoInit creates an initial commit with an empty README. It is only used when
+	// creating a repository and cannot be changed afterwards.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="autoInit is immutable"
+	AutoInit *bool `json:"autoInit,omitempty"`
+
+	// Template creates the repository from an existing template. It is only used
+	// during creation and cannot be changed afterwards.
+	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="template is immutable"
+	Template *RepositoryTemplate `json:"template,omitempty"`
+
+	// DeleteBranchOnMerge controls automatic deletion of merged head branches.
+	// +optional
+	DeleteBranchOnMerge *bool `json:"deleteBranchOnMerge,omitempty"`
+
+	// VulnerabilityAlerts controls dependency graph vulnerability alerts. This
+	// setting requires repository Administration permission.
+	// +optional
+	VulnerabilityAlerts *bool `json:"vulnerabilityAlerts,omitempty"`
+
+	// IsTemplate controls whether this repository can be used as a template.
+	// +optional
+	IsTemplate *bool `json:"isTemplate,omitempty"`
+
+	// MergeOptions contains optional pull-request merge settings.
+	// +optional
+	MergeOptions *RepositoryMergeOptions `json:"mergeOptions,omitempty"`
+
+	// DeletionPolicy determines whether deleting the custom resource orphans,
+	// archives or permanently deletes the remote GitHub repository.
 	// +kubebuilder:default=Orphan
 	DeletionPolicy RepositoryDeletionPolicy `json:"deletionPolicy,omitempty"`
 }
@@ -155,6 +292,11 @@ func (s GitHubRepositorySpec) EffectiveVisibilityForCreation() RepositoryVisibil
 	}
 
 	return *s.Visibility
+}
+
+// EffectiveAutoInit returns whether a new repository should contain an initial commit.
+func (s GitHubRepositorySpec) EffectiveAutoInit() bool {
+	return s.AutoInit != nil && *s.AutoInit
 }
 
 // GitHubRepositoryStatus defines the observed state of GitHubRepository.
@@ -195,6 +337,26 @@ type GitHubRepositoryStatus struct {
 	// Features contains repository feature values last observed in GitHub.
 	// +optional
 	Features *RepositoryFeaturesStatus `json:"features,omitempty"`
+
+	// DeleteBranchOnMerge is the observed merged-branch cleanup setting.
+	// +optional
+	DeleteBranchOnMerge bool `json:"deleteBranchOnMerge,omitempty"`
+
+	// VulnerabilityAlerts is populated when spec.vulnerabilityAlerts is managed.
+	// +optional
+	VulnerabilityAlerts *bool `json:"vulnerabilityAlerts,omitempty"`
+
+	// IsTemplate is the observed template-repository setting.
+	// +optional
+	IsTemplate bool `json:"isTemplate,omitempty"`
+
+	// Archived indicates whether GitHub reports the repository as archived.
+	// +optional
+	Archived bool `json:"archived,omitempty"`
+
+	// MergeOptions contains merge settings observed in GitHub.
+	// +optional
+	MergeOptions *RepositoryMergeOptionsStatus `json:"mergeOptions,omitempty"`
 
 	// ObservedGeneration is the GitHubRepository generation most recently reconciled.
 	// +optional

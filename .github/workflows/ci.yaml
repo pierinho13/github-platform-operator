@@ -36,7 +36,13 @@ jobs:
       - name: Verify Go modules
         run: go mod verify
 
-      - name: Generate, validate and test
+      - name: Generate code and manifests
+        run: make generate manifests
+
+      - name: Format code
+        run: make fmt
+
+      - name: Run tests
         run: make test
 
       - name: Check generated and formatted files
@@ -44,13 +50,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! git diff --exit-code; then
-            echo
+          changes="$(git status --porcelain)"
+
+          if [[ -n "${changes}" ]]; then
             echo "Generated or formatted files are not up to date."
+            echo
+            echo "Changed files:"
+            printf '%s\n' "${changes}"
+            echo
+            echo "Diff:"
+            git diff -- .
+            echo
             echo "Run locally:"
             echo
             echo "  make generate manifests"
             echo "  make fmt"
+            echo
+            echo "Then commit the generated changes."
             exit 1
           fi
 
@@ -80,6 +96,7 @@ jobs:
     name: Validate Helm and release
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
     needs:
       - test
       - lint
@@ -100,8 +117,32 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v5
 
-      - name: Generate CRDs
+      - name: Generate code and manifests
         run: make generate manifests
+
+      - name: Format code
+        run: make fmt
+
+      - name: Verify generated files are committed
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          changes="$(git status --porcelain)"
+
+          if [[ -n "${changes}" ]]; then
+            echo "The snapshot release produced uncommitted generated changes."
+            echo
+            printf '%s\n' "${changes}"
+            echo
+            git diff -- .
+            echo
+            echo "Run and commit:"
+            echo
+            echo "  make generate manifests"
+            echo "  make fmt"
+            exit 1
+          fi
 
       - name: Validate and package Helm chart
         shell: bash
@@ -118,9 +159,69 @@ jobs:
           set -euo pipefail
 
           chart="dist/helm/github-platform-operator-0.0.0-snapshot.tgz"
+          rendered="$(mktemp)"
 
           test -f "${chart}"
           tar -tzf "${chart}"
+
+          helm template \
+            github-platform-operator \
+            "${chart}" \
+            --namespace github-platform-operator-system \
+            > "${rendered}"
+
+          if ! awk '
+            function finish_document() {
+              if (
+                is_cluster_role &&
+                has_ruleset &&
+                has_ruleset_status &&
+                has_ruleset_finalizers
+              ) {
+                found = 1
+              }
+
+              is_cluster_role = 0
+              has_ruleset = 0
+              has_ruleset_status = 0
+              has_ruleset_finalizers = 0
+            }
+
+            /^---[[:space:]]*$/ {
+              finish_document()
+              next
+            }
+
+            /^[[:space:]]*kind:[[:space:]]*ClusterRole[[:space:]]*$/ {
+              is_cluster_role = 1
+            }
+
+            is_cluster_role &&
+            /^[[:space:]]*-[[:space:]]*githubrepositoryrulesets[[:space:]]*$/ {
+              has_ruleset = 1
+            }
+
+            is_cluster_role &&
+            /githubrepositoryrulesets\/status/ {
+              has_ruleset_status = 1
+            }
+
+            is_cluster_role &&
+            /githubrepositoryrulesets\/finalizers/ {
+              has_ruleset_finalizers = 1
+            }
+
+            END {
+              finish_document()
+              exit(found ? 0 : 1)
+            }
+          ' "${rendered}"; then
+            echo "The packaged Helm chart does not contain the complete GitHubRepositoryRuleset RBAC." >&2
+            echo "Check config/rbac/role.yaml and hack/package-helm-chart.sh." >&2
+            exit 1
+          fi
+
+          echo "GitHubRepositoryRuleset RBAC is present in the packaged chart."
 
       - name: Validate GoReleaser configuration
         uses: goreleaser/goreleaser-action@v7

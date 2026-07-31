@@ -18,11 +18,14 @@ rules:
   - githubactionssecrets
   - githubactionsvariables
   - githubenvironments
+  - githuborganizationmembers
   - githubproviderconfigs
   - githubrepositories
   - githubrepositorycollaborators
   - githubrepositoryrulesets
   - githubrepositoryteamaccesses
+  - githubteammemberships
+  - githubteams
   verbs:
   - create
   - delete
@@ -37,11 +40,14 @@ rules:
   - githubactionssecrets/finalizers
   - githubactionsvariables/finalizers
   - githubenvironments/finalizers
+  - githuborganizationmembers/finalizers
   - githubproviderconfigs/finalizers
   - githubrepositories/finalizers
   - githubrepositorycollaborators/finalizers
   - githubrepositoryrulesets/finalizers
   - githubrepositoryteamaccesses/finalizers
+  - githubteammemberships/finalizers
+  - githubteams/finalizers
   verbs:
   - update
 - apiGroups:
@@ -50,11 +56,14 @@ rules:
   - githubactionssecrets/status
   - githubactionsvariables/status
   - githubenvironments/status
+  - githuborganizationmembers/status
   - githubproviderconfigs/status
   - githubrepositories/status
   - githubrepositorycollaborators/status
   - githubrepositoryrulesets/status
   - githubrepositoryteamaccesses/status
+  - githubteammemberships/status
+  - githubteams/status
   verbs:
   - get
   - patch

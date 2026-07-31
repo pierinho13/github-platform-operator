@@ -218,6 +218,39 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := (&controller.GitHubOrganizationMemberReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubOrganizationMember")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubTeamReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubTeam")
+		os.Exit(1)
+	}
+
+	if err := (&controller.GitHubTeamMembershipReconciler{
+		Client:              mgr.GetClient(),
+		APIReader:           mgr.GetAPIReader(),
+		Scheme:              mgr.GetScheme(),
+		GitHubClientFactory: githubClientFactory,
+		GitHubTokenProvider: githubTokenProvider,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "GitHubTeamMembership")
+		os.Exit(1)
+	}
+
 	if err := (&controller.GitHubRepositoryReconciler{
 		Client:              mgr.GetClient(),
 		APIReader:           mgr.GetAPIReader(),

@@ -1,0 +1,149 @@
+minimum_pre_commit_version: "3.2.0"
+
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      # ------------------------------------------------------------
+      # PRE-COMMIT
+      # ------------------------------------------------------------
+
+      - id: generate-and-format
+        name: Generate code, manifests and format
+        description: Regenerate generated Go files, CRDs, RBAC and formatting
+        entry: >-
+          bash -c '
+            set -euo pipefail
+
+            make generate manifests
+            make fmt
+          '
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-commit
+
+      - id: verify-go-modules
+        name: Verify Go modules
+        description: Verify that downloaded Go modules have not been modified
+        entry: go mod verify
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-commit
+
+      - id: test
+        name: Run tests
+        description: Run the complete operator test suite
+        entry: make test
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-commit
+
+      # ------------------------------------------------------------
+      # PRE-PUSH
+      # ------------------------------------------------------------
+
+      - id: generated-files
+        name: Verify generated files
+        description: Ensure generated files are committed before pushing
+        entry: >-
+          bash -c '
+            set -euo pipefail
+
+            make generate manifests
+            make fmt
+
+            if [[ -n "$(git status --porcelain)" ]]; then
+              echo
+              echo "Generated or formatted files are not committed."
+              echo
+              git status --short
+              echo
+              echo "Run:"
+              echo
+              echo "  make generate manifests"
+              echo "  make fmt"
+              echo "  git add ."
+              echo
+              exit 1
+            fi
+          '
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
+
+      - id: lint
+        name: Run golangci-lint
+        description: Run the complete Go linter configuration
+        entry: golangci-lint run --timeout=5m
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
+
+      - id: validate-helm-chart
+        name: Validate Helm chart
+        description: Package and verify the operator Helm chart
+        entry: >-
+          bash -c '
+            set -euo pipefail
+
+            chart_version="0.0.0-pre-push"
+            app_version="v0.0.0-pre-push"
+            chart="dist/helm/github-platform-operator-${chart_version}.tgz"
+            rendered="$(mktemp)"
+
+            trap "rm -f ${rendered}" EXIT
+
+            rm -rf dist/helm
+
+            ./hack/package-helm-chart.sh \
+              "${chart_version}" \
+              "${app_version}"
+
+            if [[ ! -f "${chart}" ]]; then
+              echo "Helm chart was not generated: ${chart}" >&2
+              exit 1
+            fi
+
+            helm lint "${chart}"
+
+            helm template \
+              github-platform-operator \
+              "${chart}" \
+              --namespace github-platform-operator-system \
+              > "${rendered}"
+
+            if ! grep -q "githubrepositoryrulesets/status" "${rendered}"; then
+              echo "Missing GitHubRepositoryRuleset status RBAC in Helm chart." >&2
+              exit 1
+            fi
+
+            if ! grep -q "githubrepositoryrulesets/finalizers" "${rendered}"; then
+              echo "Missing GitHubRepositoryRuleset finalizers RBAC in Helm chart." >&2
+              exit 1
+            fi
+
+            if ! grep -Eq \
+              "^[[:space:]]*-[[:space:]]*githubrepositoryrulesets[[:space:]]*$" \
+              "${rendered}"; then
+              echo "Missing GitHubRepositoryRuleset RBAC in Helm chart." >&2
+              exit 1
+            fi
+
+            echo "Helm chart and GitHubRepositoryRuleset RBAC are valid."
+          '
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages:
+          - pre-push
