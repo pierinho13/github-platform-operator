@@ -251,15 +251,17 @@ jobs:
 
           chart="dist/helm/github-platform-operator-${CHART_VERSION}.tgz"
           provenance="${chart}.prov"
+          archive_listing="$(mktemp)"
           rendered="$(mktemp)"
 
           test -f "${chart}"
           test -f "${provenance}"
           helm verify "${chart}" --keyring "${HELM_VERIFY_KEYRING}"
-          tar -tzf "${chart}"
+          tar -tzf "${chart}" > "${archive_listing}"
+          cat "${archive_listing}"
 
-          if ! tar -tzf "${chart}" |
-            grep -qx 'github-platform-operator/values.schema.json'; then
+          if ! grep -Fx 'github-platform-operator/values.schema.json' \
+            "${archive_listing}" >/dev/null; then
 
             echo "The packaged Helm chart does not contain values.schema.json." >&2
             exit 1
