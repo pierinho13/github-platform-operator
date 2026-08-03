@@ -22,7 +22,9 @@ fi
 "${ROOT_DIR}/hack/sync-helm-crds.sh"
 
 mkdir -p "${OUTPUT_DIR}"
-rm -f "${OUTPUT_DIR}"/github-platform-operator-*.tgz
+rm -f \
+  "${OUTPUT_DIR}"/github-platform-operator-*.tgz \
+  "${OUTPUT_DIR}"/github-platform-operator-*.tgz.prov
 
 helm lint "${CHART_DIR}"
 
@@ -31,7 +33,23 @@ helm template github-platform-operator "${CHART_DIR}" \
   --set "image.tag=${APP_VERSION}" \
   >/dev/null
 
-helm package "${CHART_DIR}" \
-  --destination "${OUTPUT_DIR}" \
-  --version "${CHART_VERSION}" \
+package_args=(
+  --destination "${OUTPUT_DIR}"
+  --version "${CHART_VERSION}"
   --app-version "${APP_VERSION}"
+)
+
+if [[ -n "${HELM_SIGNING_KEY:-}" ]]; then
+  : "${HELM_SIGNING_KEYRING:?HELM_SIGNING_KEYRING is required}"
+  : "${HELM_SIGNING_PASSPHRASE_FILE:?HELM_SIGNING_PASSPHRASE_FILE is required}"
+
+  package_args+=(
+    --sign
+    --key "${HELM_SIGNING_KEY}"
+    --keyring "${HELM_SIGNING_KEYRING}"
+    --passphrase-file "${HELM_SIGNING_PASSPHRASE_FILE}"
+  )
+fi
+
+helm package "${CHART_DIR}" \
+  "${package_args[@]}"

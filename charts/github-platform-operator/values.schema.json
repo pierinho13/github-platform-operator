@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "GitHub Platform Operator Helm values",
+  "description": "Configuration for the GitHub Platform Operator controller and its Kubernetes resources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "replicaCount",
+    "image",
+    "imagePullSecrets",
+    "serviceAccount",
+    "rbac",
+    "leaderElection",
+    "metrics",
+    "networkPolicy",
+    "resources"
+  ],
+  "properties": {
+    "replicaCount": {
+      "description": "Number of controller replicas.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "image": {
+      "description": "Controller container image configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "pullPolicy", "tag"],
+      "properties": {
+        "repository": {
+          "description": "Controller image repository.",
+          "type": "string",
+          "minLength": 1
+        },
+        "pullPolicy": {
+          "description": "Kubernetes image pull policy.",
+          "type": "string",
+          "enum": ["Always", "IfNotPresent", "Never"]
+        },
+        "tag": {
+          "description": "Image tag override. An empty value uses the chart appVersion.",
+          "type": "string"
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "description": "References to Secrets used for pulling the controller image.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "nameOverride": {
+      "description": "Partial override for the chart name.",
+      "type": "string"
+    },
+    "fullnameOverride": {
+      "description": "Complete override for generated resource names.",
+      "type": "string"
+    },
+    "serviceAccount": {
+      "description": "Controller ServiceAccount configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create", "annotations", "name"],
+      "properties": {
+        "create": {
+          "description": "Create a ServiceAccount for the controller.",
+          "type": "boolean"
+        },
+        "annotations": {
+          "$ref": "#/definitions/stringMap",
+          "description": "Annotations added to the ServiceAccount."
+        },
+        "name": {
+          "description": "ServiceAccount name. Required when create is false.",
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "create": {"const": false}
+            }
+          },
+          "then": {
+            "properties": {
+              "name": {"minLength": 1}
+            }
+          }
+        }
+      ]
+    },
+    "rbac": {
+      "description": "Role-based access control configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create"],
+      "properties": {
+        "create": {
+          "description": "Create the controller ClusterRoles and bindings.",
+          "type": "boolean"
+        }
+      }
+    },
+    "leaderElection": {
+      "description": "Leader election configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {
+          "description": "Enable controller-runtime leader election.",
+          "type": "boolean"
+        }
+      }
+    },
+    "metrics": {
+      "description": "Controller metrics endpoint configuration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "secure", "port", "service"],
+      "properties": {
+        "enabled": {
+          "description": "Expose the controller metrics endpoint.",
+          "type": "boolean"
+        },
+        "secure": {
+          "description": "Require Kubernetes authentication and authorization for metrics.",
+          "type": "boolean"
+        },
+        "port": {
+          "description": "Metrics container and Service port.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "service": {
+          "description": "Metrics Service configuration.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "annotations"],
+          "properties": {
+            "type": {
+              "description": "Kubernetes Service type.",
+              "type": "string",
+              "enum": ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]
+            },
+            "annotations": {
+              "$ref": "#/definitions/stringMap",
+              "description": "Annotations added to the metrics Service."
+            }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "description": "NetworkPolicy configuration for the metrics endpoint.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "namespaceSelectorLabels"],
+      "properties": {
+        "enabled": {
+          "description": "Create a NetworkPolicy for metrics ingress.",
+          "type": "boolean"
+        },
+        "namespaceSelectorLabels": {
+          "$ref": "#/definitions/stringMap",
+          "description": "Namespace labels allowed to access metrics."
+        }
+      }
+    },
+    "podAnnotations": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Annotations added to controller Pods."
+    },
+    "podLabels": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Labels added to controller Pods."
+    },
+    "podSecurityContext": {
+      "description": "Kubernetes Pod security context.",
+      "type": "object"
+    },
+    "securityContext": {
+      "description": "Kubernetes security context for the controller container.",
+      "type": "object"
+    },
+    "resources": {
+      "description": "Controller CPU, memory and other resource requests and limits.",
+      "type": "object",
+      "properties": {
+        "limits": {"$ref": "#/definitions/resourceList"},
+        "requests": {"$ref": "#/definitions/resourceList"}
+      }
+    },
+    "livenessProbe": {
+      "description": "Controller liveness probe timing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialDelaySeconds", "periodSeconds"],
+      "properties": {
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "readinessProbe": {
+      "description": "Controller readiness probe timing.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initialDelaySeconds", "periodSeconds"],
+      "properties": {
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "extraArgs": {
+      "description": "Additional command-line arguments passed to the controller.",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "nodeSelector": {
+      "$ref": "#/definitions/stringMap",
+      "description": "Node labels used to schedule controller Pods."
+    },
+    "tolerations": {
+      "description": "Kubernetes tolerations for controller Pods.",
+      "type": "array",
+      "items": {"type": "object"}
+    },
+    "affinity": {
+      "description": "Kubernetes affinity rules for controller Pods.",
+      "type": "object"
+    },
+    "terminationGracePeriodSeconds": {
+      "description": "Grace period used when terminating controller Pods.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "revisionHistoryLimit": {
+      "description": "Number of old ReplicaSets retained by the Deployment.",
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "definitions": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "resourceList": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number"]
+      }
+    }
+  }
+}

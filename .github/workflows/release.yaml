@@ -180,6 +180,54 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         uses: azure/setup-helm@v5
 
+      - name: Configure Helm chart signing
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          PRIVATE_KEY: ${{ secrets.HELM_SIGNING_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSPHRASE: ${{ secrets.HELM_SIGNING_PASSPHRASE }}
+          SIGNING_FINGERPRINT: DBBC4A49D2BB68565A9BCC383CA8825330932B17
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${PRIVATE_KEY}" || -z "${PRIVATE_KEY_PASSPHRASE}" ]]; then
+            echo "Helm signing secrets are not configured." >&2
+            exit 1
+          fi
+
+          signing_home="${RUNNER_TEMP}/helm-signing-gnupg"
+          signing_keyring="${RUNNER_TEMP}/helm-signing-keyring.gpg"
+          verification_keyring="${RUNNER_TEMP}/helm-verification-keyring.gpg"
+          passphrase_file="${RUNNER_TEMP}/helm-signing-passphrase"
+
+          mkdir --mode=700 "${signing_home}"
+          printf '%s' "${PRIVATE_KEY_PASSPHRASE}" > "${passphrase_file}"
+          chmod 600 "${passphrase_file}"
+
+          printf '%s' "${PRIVATE_KEY}" |
+            gpg --homedir "${signing_home}" --batch --import
+
+          gpg \
+            --homedir "${signing_home}" \
+            --batch \
+            --pinentry-mode loopback \
+            --passphrase-file "${passphrase_file}" \
+            --output "${signing_keyring}" \
+            --export-secret-keys "${SIGNING_FINGERPRINT}"
+
+          gpg \
+            --homedir "${signing_home}" \
+            --batch \
+            --output "${verification_keyring}" \
+            --export "${SIGNING_FINGERPRINT}"
+
+          {
+            echo "HELM_SIGNING_KEY=pierinho13@gmail.com"
+            echo "HELM_SIGNING_KEYRING=${signing_keyring}"
+            echo "HELM_SIGNING_PASSPHRASE_FILE=${passphrase_file}"
+            echo "HELM_VERIFY_KEYRING=${verification_keyring}"
+          } >> "${GITHUB_ENV}"
+
       - name: Build Helm chart
         if: steps.version.outputs.publish == 'true'
         shell: bash
@@ -202,10 +250,20 @@ jobs:
           set -euo pipefail
 
           chart="dist/helm/github-platform-operator-${CHART_VERSION}.tgz"
+          provenance="${chart}.prov"
           rendered="$(mktemp)"
 
           test -f "${chart}"
+          test -f "${provenance}"
+          helm verify "${chart}" --keyring "${HELM_VERIFY_KEYRING}"
           tar -tzf "${chart}"
+
+          if ! tar -tzf "${chart}" |
+            grep -qx 'github-platform-operator/values.schema.json'; then
+
+            echo "The packaged Helm chart does not contain values.schema.json." >&2
+            exit 1
+          fi
 
           helm template \
             github-platform-operator \
