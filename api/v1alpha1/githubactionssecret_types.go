@@ -109,7 +109,3 @@ type GitHubActionsSecretList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubActionsSecret `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubActionsSecret{}, &GitHubActionsSecretList{})
-}

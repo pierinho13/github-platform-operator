@@ -165,7 +165,3 @@ type GitHubTeamList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubTeam `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubTeam{}, &GitHubTeamList{})
-}

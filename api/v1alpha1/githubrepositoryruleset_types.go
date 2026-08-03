@@ -304,7 +304,3 @@ type GitHubRepositoryRulesetList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []GitHubRepositoryRuleset `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&GitHubRepositoryRuleset{}, &GitHubRepositoryRulesetList{})
-}
