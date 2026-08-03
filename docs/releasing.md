@@ -9,6 +9,12 @@ A release publishes:
 4. an OCI Helm chart at
    `oci://ghcr.io/pierinho13/charts/github-platform-operator`
 
+Every successful release workflow run on `main` also publishes
+`artifacthub-repo.yml` to the chart repository using the reserved
+`artifacthub.io` OCI tag. Artifact Hub uses this metadata to verify the
+publisher and repository ownership. This happens even when the commit does not
+produce a new semantic version.
+
 ## Pre-release checks 
 
 Run:
