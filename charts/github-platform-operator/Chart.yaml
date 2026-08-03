@@ -9,6 +9,7 @@ sources:
   - https://github.com/pierinho13/github-platform-operator
 maintainers:
   - name: pierinho13
+    email: pierinho13@gmail.com
     url: https://github.com/pierinho13
 keywords:
   - github
@@ -19,3 +20,14 @@ keywords:
 annotations:
   artifacthub.io/category: integration-delivery
   artifacthub.io/license: Apache-2.0
+  artifacthub.io/operator: "true"
+  artifacthub.io/operatorCapabilities: Full Lifecycle
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/pierinho13/github-platform-operator
+    - name: Documentation
+      url: https://github.com/pierinho13/github-platform-operator#documentation
+    - name: Getting Started
+      url: https://github.com/pierinho13/github-platform-operator/blob/main/docs/getting-started.md
+    - name: support
+      url: https://github.com/pierinho13/github-platform-operator/issues
