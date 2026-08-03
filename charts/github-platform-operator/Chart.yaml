@@ -22,6 +22,9 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: Full Lifecycle
+  artifacthub.io/signKey: |
+    fingerprint: DBBC4A49D2BB68565A9BCC383CA8825330932B17
+    url: https://raw.githubusercontent.com/pierinho13/github-platform-operator/main/helm-signing-key.asc
   artifacthub.io/links: |
     - name: Source
       url: https://github.com/pierinho13/github-platform-operator

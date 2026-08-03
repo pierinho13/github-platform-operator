@@ -15,6 +15,13 @@ Every successful release workflow run on `main` also publishes
 publisher and repository ownership. This happens even when the commit does not
 produce a new semantic version.
 
+The Helm chart is signed during packaging. The workflow reconstructs a
+temporary OpenPGP keyring from the `HELM_SIGNING_PRIVATE_KEY` and
+`HELM_SIGNING_PASSPHRASE` repository secrets, creates a `.prov` file and
+verifies it before publication. Helm publishes the provenance file as an
+additional layer of the OCI chart. The corresponding public key is stored in
+`helm-signing-key.asc`.
+
 ## Pre-release checks 
 
 Run:
@@ -81,6 +88,16 @@ Inspect the chart:
 helm show chart \
   oci://ghcr.io/pierinho13/charts/github-platform-operator \
   --version 0.1.0
+```
+
+Pull and verify the chart provenance:
+
+```bash
+helm pull \
+  oci://ghcr.io/pierinho13/charts/github-platform-operator \
+  --version 0.1.0 \
+  --verify \
+  --keyring helm-signing-key.asc
 ```
 
 Install it in a disposable cluster:
