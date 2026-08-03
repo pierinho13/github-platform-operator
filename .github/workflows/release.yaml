@@ -257,7 +257,7 @@ jobs:
 
       - name: Log in to GHCR
         if: steps.version.outputs.publish == 'true'
-        uses: docker/login-action@v4.5.2
+        uses: docker/login-action@v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -283,7 +283,7 @@ jobs:
 
       - name: Generate container provenance
         if: steps.version.outputs.publish == 'true'
-        uses: actions/attest@v4.2.0
+        uses: actions/attest@v4.2.1
         with:
           subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.image.outputs.digest }}

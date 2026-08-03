@@ -14,6 +14,8 @@ GitHub Platform Operator lets platform teams manage GitHub through Kubernetes
 custom resources and GitOps workflows instead of manual configuration or
 one-off automation scripts.
 
+⭐ Drop a star to support kubectl-peek ⭐
+
 ## Features
 
 - create repositories from scratch or templates, or safely adopt existing ones
