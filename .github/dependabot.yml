@@ -4,9 +4,12 @@ updates:
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "06:00"
       timezone: Europe/Madrid
+    commit-message:
+      prefix: "fix(deps)"
     open-pull-requests-limit: 10
     groups:
       go-dependencies:
@@ -16,9 +19,12 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: daily
+      interval: weekly
+      day: monday
       time: "06:15"
       timezone: Europe/Madrid
+    commit-message:
+      prefix: "fix(deps)"
     open-pull-requests-limit: 10
     groups:
       github-actions:
