@@ -16,6 +16,9 @@ one-off automation scripts.
 
 ⭐ Drop a star to support GitHub Platform Operator ⭐
 
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/7c9a9f53-484c-46d3-bde1-6c8132e9a85f" />
+
+
 ## Features
 
 - create repositories from scratch or templates, or safely adopt existing ones
