@@ -149,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          ./hack/package-helm-chart.sh \
+          ./hack/package-release-helm-chart.sh \
             0.0.0-snapshot \
             v0.0.0-snapshot
 
@@ -212,7 +212,7 @@ jobs:
             }
           ' "${rendered}"; then
             echo "The packaged Helm chart does not contain the complete GitHubRepositoryRuleset RBAC." >&2
-            echo "Check config/rbac/role.yaml and hack/package-helm-chart.sh." >&2
+            echo "Check config/rbac/role.yaml and hack/package-release-helm-chart.sh." >&2
             exit 1
           fi
 

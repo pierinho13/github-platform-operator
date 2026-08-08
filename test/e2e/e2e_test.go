@@ -254,6 +254,9 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(metricsOutput).To(ContainSubstring(
 				"controller_runtime_reconcile_total",
 			))
+			Expect(metricsOutput).To(ContainSubstring(
+				"github_platform_operator_github_rate_limit_blocked_until_timestamp_seconds",
+			))
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks

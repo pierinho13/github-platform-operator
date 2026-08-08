@@ -115,6 +115,46 @@ resources without producing a continuous error storm.
 A normal authorization or feature-plan `403` is not treated as a rate limit.
 Inspect the response message in the resource condition or controller logs.
 
+## Metrics and Grafana
+
+The manager exposes the standard `controller-runtime`, Go runtime and process
+metrics together with a small set of GitHub-specific Prometheus metrics:
+
+| Metric | Purpose |
+|---|---|
+| `github_platform_operator_github_api_requests_total` | GitHub API responses by HTTP method and status code |
+| `github_platform_operator_github_api_request_duration_seconds` | GitHub API HTTP round-trip latency histogram by method |
+| `github_platform_operator_github_api_transport_errors_total` | Requests that failed before an HTTP response was received |
+| `github_platform_operator_github_rate_limit_limit` | Last observed GitHub rate-limit ceiling by resource |
+| `github_platform_operator_github_rate_limit_remaining` | Last observed remaining requests by rate-limit resource |
+| `github_platform_operator_github_rate_limit_reset_timestamp_seconds` | Last observed rate-limit reset timestamp |
+| `github_platform_operator_github_rate_limit_events_total` | Detected primary, secondary or unknown rate-limit events |
+| `github_platform_operator_github_rate_limit_blocked_until_timestamp_seconds` | Timestamp until which the shared reactive rate-limit gate is blocked |
+
+The metrics are instrumented in the shared GitHub HTTP transport, so the same
+measurements cover repository, organization, team, ruleset, Actions and GitHub
+App token requests without duplicating instrumentation in every controller.
+Rate-limit gauges represent the last response observed by the shared HTTP client;
+they are intentionally not labeled by provider, organization, repository or
+credential in order to avoid sensitive labels and unbounded cardinality.
+
+Prometheus must scrape the manager metrics Service. The Kustomize deployment
+contains a ServiceMonitor example under `config/prometheus`. With secure metrics,
+the scraping service account must also be authorized for the non-resource
+`/metrics` URL.
+
+An importable Grafana dashboard is included at:
+
+```text
+dashboards/grafana/github-platform-operator.json
+```
+
+The dashboard combines these GitHub-specific metrics with existing metrics such
+as `controller_runtime_reconcile_total`,
+`controller_runtime_reconcile_time_seconds`, `workqueue_depth`,
+`process_cpu_seconds_total`, `process_resident_memory_bytes` and
+`go_goroutines`.
+
 ## Secret and variable rotation
 
 Update the referenced Kubernetes Secret:
