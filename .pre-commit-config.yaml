@@ -106,7 +106,7 @@ repos:
 
             rm -rf dist/helm
 
-            ./hack/package-helm-chart.sh \
+            ./hack/package-release-helm-chart.sh \
               "${chart_version}" \
               "${app_version}"
 

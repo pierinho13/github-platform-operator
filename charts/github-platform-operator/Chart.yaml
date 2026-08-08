@@ -3,8 +3,9 @@ name: github-platform-operator
 description: Kubernetes operator for managing GitHub repositories, access and Actions configuration
 type: application
 
-version: 0.6.0
-appVersion: "v0.6.0"
+# Release versions are injected into the packaged chart by the release pipeline.
+version: 0.0.0
+appVersion: "v0.0.0"
 
 home: https://github.com/pierinho13/github-platform-operator
 
@@ -29,15 +30,8 @@ annotations:
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: Full Lifecycle
 
-  artifacthub.io/changes: |
-    - kind: added
-      description: Added Prometheus metrics for GitHub API requests, latency, transport errors and rate-limit state.
-    - kind: added
-      description: Added GitHub API rate-limit observability including remaining requests, reset time and rate-limit events.
-    - kind: added
-      description: Added a ready-to-import Grafana dashboard for operator and GitHub API observability.
-    - kind: changed
-      description: Extended metrics endpoint tests to cover operator-specific Prometheus metrics.
+  # artifacthub.io/changes is generated only in the packaged release chart from
+  # Conventional Commits since the previous Git tag.
 
   artifacthub.io/signKey: |
     fingerprint: DBBC4A49D2BB68565A9BCC383CA8825330932B17
