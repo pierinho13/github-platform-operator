@@ -400,8 +400,8 @@ func TestPrimaryRateLimitResetContract(t *testing.T) {
 	response := &http.Response{
 		StatusCode: http.StatusForbidden,
 		Header: http.Header{
-			"X-Ratelimit-Remaining": []string{"0"},
-			"X-Ratelimit-Reset":     []string{strconv.FormatInt(resetAt, 10)},
+			rateLimitHeaderRemaining: []string{"0"},
+			rateLimitHeaderReset:     []string{strconv.FormatInt(resetAt, 10)},
 		},
 		Body: io.NopCloser(strings.NewReader(`{"message":"API rate limit exceeded"}`)),
 	}

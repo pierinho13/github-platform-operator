@@ -176,6 +176,7 @@ policies or upgrading CRD schemas.
 - [Getting started](docs/getting-started.md)
 - [Custom resources and examples](docs/resources.md)
 - [Operations, upgrades and troubleshooting](docs/operations.md)
+- [Grafana dashboard](dashboards/grafana/README.md)
 - [Helm chart](charts/github-platform-operator/README.md)
 - [Development guide](docs/development.md)
 - [Release process](docs/releasing.md)

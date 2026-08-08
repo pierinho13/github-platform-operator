@@ -28,7 +28,13 @@ import (
 	"time"
 )
 
-const fallbackSecondaryRateLimitDelay = time.Minute
+const (
+	fallbackSecondaryRateLimitDelay = time.Minute
+	rateLimitHeaderLimit            = "X-Ratelimit-Limit"
+	rateLimitHeaderRemaining        = "X-Ratelimit-Remaining"
+	rateLimitHeaderReset            = "X-Ratelimit-Reset"
+	rateLimitHeaderResource         = "X-Ratelimit-Resource"
+)
 
 // RateLimitError indicates that GitHub asked the operator to stop making
 // requests temporarily. It can represent both primary and secondary limits.
@@ -85,7 +91,7 @@ func (g *rateLimitGate) currentError(now time.Time) *RateLimitError {
 	}
 }
 
-func (g *rateLimitGate) block(until time.Time, statusCode int, body string) {
+func (g *rateLimitGate) block(until time.Time, statusCode int, body string) time.Time {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -94,6 +100,7 @@ func (g *rateLimitGate) block(until time.Time, statusCode int, body string) {
 		g.statusCode = statusCode
 		g.body = body
 	}
+	return g.blockedUntil
 }
 
 // RateLimitTransport adds a shared, reactive GitHub rate-limit gate.
@@ -107,6 +114,7 @@ type RateLimitTransport struct {
 
 	gateOnce sync.Once
 	gate     *rateLimitGate
+	metrics  *githubMetrics
 }
 
 // NewRateLimitedHTTPClient creates an HTTP client whose rate-limit state is
@@ -115,8 +123,9 @@ func NewRateLimitedHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: defaultRequestTimeout,
 		Transport: &RateLimitTransport{
-			Base: http.DefaultTransport,
-			gate: &rateLimitGate{},
+			Base:    http.DefaultTransport,
+			gate:    &rateLimitGate{},
+			metrics: defaultGitHubMetrics,
 		},
 	}
 }
@@ -142,10 +151,18 @@ func (t *RateLimitTransport) RoundTrip(request *http.Request) (*http.Response, e
 		base = http.DefaultTransport
 	}
 
+	requestStartedAt := time.Now()
 	response, err := base.RoundTrip(request)
+	duration := time.Since(requestStartedAt)
+	metrics := t.metrics
+	if metrics == nil {
+		metrics = defaultGitHubMetrics
+	}
 	if err != nil {
+		metrics.observeTransportError(request, duration)
 		return nil, err
 	}
+	metrics.observeResponse(request, response, duration)
 
 	rateErr, err := rateLimitErrorFromResponse(response)
 	if err != nil {
@@ -156,7 +173,8 @@ func (t *RateLimitTransport) RoundTrip(request *http.Request) (*http.Response, e
 		return response, nil
 	}
 
-	gate.block(rateErr.RetryAt, rateErr.StatusCode, rateErr.Body)
+	blockedUntil := gate.block(rateErr.RetryAt, rateErr.StatusCode, rateErr.Body)
+	metrics.observeRateLimit(response, rateErr, blockedUntil)
 	closeResponseBody(response.Body)
 	return nil, rateErr
 }
@@ -178,7 +196,7 @@ func rateLimitErrorFromResponse(response *http.Response) (*RateLimitError, error
 
 	bodyText := strings.TrimSpace(string(body))
 	lowerBody := strings.ToLower(bodyText)
-	remaining := strings.TrimSpace(response.Header.Get("X-RateLimit-Remaining"))
+	remaining := strings.TrimSpace(response.Header.Get(rateLimitHeaderRemaining))
 	retryAfter := strings.TrimSpace(response.Header.Get("Retry-After"))
 
 	isRateLimited := response.StatusCode == http.StatusTooManyRequests ||
@@ -202,7 +220,7 @@ func rateLimitErrorFromResponse(response *http.Response) (*RateLimitError, error
 		}
 	} else if remaining == "0" {
 		if reset, parseErr := strconv.ParseInt(
-			strings.TrimSpace(response.Header.Get("X-RateLimit-Reset")),
+			strings.TrimSpace(response.Header.Get(rateLimitHeaderReset)),
 			10,
 			64,
 		); parseErr == nil && reset > 0 {

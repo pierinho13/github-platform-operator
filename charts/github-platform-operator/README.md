@@ -170,6 +170,12 @@ helm show values \
   oci://ghcr.io/pierinho13/charts/github-platform-operator
 ```
 
+The operator exposes standard `controller-runtime` metrics plus GitHub API and
+rate-limit metrics. An importable Grafana dashboard is available in the source
+repository at `dashboards/grafana/github-platform-operator.json`. See the
+[operations guide](https://github.com/pierinho13/github-platform-operator/blob/main/docs/operations.md#metrics-and-grafana)
+for scraping and dashboard details.
+
 ## CRDs and upgrades
 
 The chart includes generated CRDs under `crds/`. Helm installs them before the
