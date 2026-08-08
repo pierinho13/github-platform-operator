@@ -2,29 +2,47 @@ apiVersion: v2
 name: github-platform-operator
 description: Kubernetes operator for managing GitHub repositories, access and Actions configuration
 type: application
-version: 0.1.0
-appVersion: "v0.1.0"
+
+version: 0.6.0
+appVersion: "v0.6.0"
+
 home: https://github.com/pierinho13/github-platform-operator
+
 sources:
   - https://github.com/pierinho13/github-platform-operator
+
 maintainers:
   - name: pierinho13
     email: pierinho13@gmail.com
     url: https://github.com/pierinho13
+
 keywords:
   - github
   - github-actions
   - kubernetes
   - operator
   - platform-engineering
+
 annotations:
   artifacthub.io/category: integration-delivery
   artifacthub.io/license: Apache-2.0
   artifacthub.io/operator: "true"
   artifacthub.io/operatorCapabilities: Full Lifecycle
+
+  artifacthub.io/changes: |
+    - kind: added
+      description: Added Prometheus metrics for GitHub API requests, latency, transport errors and rate-limit state.
+    - kind: added
+      description: Added GitHub API rate-limit observability including remaining requests, reset time and rate-limit events.
+    - kind: added
+      description: Added a ready-to-import Grafana dashboard for operator and GitHub API observability.
+    - kind: changed
+      description: Extended metrics endpoint tests to cover operator-specific Prometheus metrics.
+
   artifacthub.io/signKey: |
     fingerprint: DBBC4A49D2BB68565A9BCC383CA8825330932B17
     url: https://raw.githubusercontent.com/pierinho13/github-platform-operator/main/helm-signing-key.asc
+
   artifacthub.io/links: |
     - name: Source
       url: https://github.com/pierinho13/github-platform-operator
@@ -32,5 +50,5 @@ annotations:
       url: https://github.com/pierinho13/github-platform-operator#documentation
     - name: Getting Started
       url: https://github.com/pierinho13/github-platform-operator/blob/main/docs/getting-started.md
-    - name: support
+    - name: Support
       url: https://github.com/pierinho13/github-platform-operator/issues
