@@ -155,6 +155,10 @@ metrics:
   enabled: true
   secure: true
   port: 8443
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
 
 networkPolicy:
   enabled: false
@@ -175,6 +179,46 @@ rate-limit metrics. An importable Grafana dashboard is available in the source
 repository at `dashboards/grafana/github-platform-operator.json`. See the
 [operations guide](https://github.com/pierinho13/github-platform-operator/blob/main/docs/operations.md#metrics-and-grafana)
 for scraping and dashboard details.
+
+### Prometheus Operator ServiceMonitor
+
+When the Prometheus Operator CRDs are installed, the chart can create a
+`ServiceMonitor` for the metrics Service:
+
+```yaml
+metrics:
+  enabled: true
+  secure: true
+  port: 8443
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    additionalLabels:
+      release: kube-prometheus-stack
+    interval: 30s
+    scrapeTimeout: 10s
+    prometheusServiceAccount:
+      name: kube-prometheus-stack-prometheus
+      namespace: monitoring
+```
+
+`serviceMonitor.namespace` defaults to the Helm release namespace. Use
+`additionalLabels` when the Prometheus installation selects ServiceMonitors by
+label.
+
+For secure metrics, the ServiceMonitor uses the Prometheus Pod's projected
+ServiceAccount token by default. When `prometheusServiceAccount.name` and
+`prometheusServiceAccount.namespace` are both set and `rbac.create=true`, the
+chart creates a ClusterRoleBinding granting that ServiceAccount `GET /metrics`.
+Leave both fields empty when equivalent metrics-reader RBAC is managed
+externally.
+
+The default secure scrape skips certificate verification because
+controller-runtime serves the metrics endpoint with its runtime TLS
+certificate unless a trusted certificate is configured separately.
+
+If `networkPolicy.enabled=true`, make sure the Prometheus namespace matches the
+configured metrics ingress policy.
 
 ## CRDs and upgrades
 

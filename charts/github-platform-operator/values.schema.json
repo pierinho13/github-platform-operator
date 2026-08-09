@@ -128,7 +128,7 @@
       "description": "Controller metrics endpoint configuration.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "secure", "port", "service"],
+      "required": ["enabled", "secure", "port", "service", "serviceMonitor"],
       "properties": {
         "enabled": {
           "description": "Expose the controller metrics endpoint.",
@@ -160,8 +160,128 @@
               "description": "Annotations added to the metrics Service."
             }
           }
+        },
+        "serviceMonitor": {
+          "description": "Prometheus Operator ServiceMonitor configuration.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "namespace",
+            "additionalLabels",
+            "annotations",
+            "interval",
+            "scrapeTimeout",
+            "bearerTokenFile",
+            "tlsConfig",
+            "prometheusServiceAccount"
+          ],
+          "properties": {
+            "enabled": {
+              "description": "Create a ServiceMonitor for Prometheus Operator.",
+              "type": "boolean"
+            },
+            "namespace": {
+              "description": "Namespace where the ServiceMonitor is created. Empty uses the Helm release namespace.",
+              "type": "string"
+            },
+            "additionalLabels": {
+              "$ref": "#/definitions/stringMap",
+              "description": "Additional labels used by Prometheus to select the ServiceMonitor."
+            },
+            "annotations": {
+              "$ref": "#/definitions/stringMap",
+              "description": "Annotations added to the ServiceMonitor."
+            },
+            "interval": {
+              "description": "Prometheus scrape interval.",
+              "type": "string",
+              "minLength": 1
+            },
+            "scrapeTimeout": {
+              "description": "Prometheus scrape timeout. It must not exceed the scrape interval.",
+              "type": "string",
+              "minLength": 1
+            },
+            "bearerTokenFile": {
+              "description": "Bearer token file used by Prometheus when metrics are secure. Empty disables file-based bearer authentication.",
+              "type": "string"
+            },
+            "tlsConfig": {
+              "description": "TLS configuration used by the ServiceMonitor for secure metrics.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["insecureSkipVerify"],
+              "properties": {
+                "insecureSkipVerify": {
+                  "description": "Disable verification of the metrics endpoint TLS certificate.",
+                  "type": "boolean"
+                }
+              }
+            },
+            "prometheusServiceAccount": {
+              "description": "Prometheus ServiceAccount to bind to the metrics-reader ClusterRole. Leave both fields empty when RBAC is managed externally.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "namespace"],
+              "properties": {
+                "name": {
+                  "description": "Prometheus ServiceAccount name.",
+                  "type": "string"
+                },
+                "namespace": {
+                  "description": "Prometheus ServiceAccount namespace.",
+                  "type": "string"
+                }
+              },
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "name": {"minLength": 1}
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "namespace": {"minLength": 1}
+                    }
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "namespace": {"minLength": 1}
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "name": {"minLength": 1}
+                    }
+                  }
+                }
+              ]
+            }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "serviceMonitor": {
+                "properties": {
+                  "enabled": {"const": true}
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enabled": {"const": true}
+            }
+          }
+        }
+      ]
     },
     "networkPolicy": {
       "description": "NetworkPolicy configuration for the metrics endpoint.",
