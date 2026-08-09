@@ -20,6 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -94,25 +96,25 @@ func resolveRepositoryAccess(
 	}, nil
 }
 
-func verifyRemoteRepository(
+func getRemoteRepository(
 	ctx context.Context,
 	resolved *resolvedRepositoryAccess,
-) error {
-	_, err := resolved.Client.GetRepository(
+) (*githubclient.Repository, error) {
+	repository, err := resolved.Client.GetRepository(
 		ctx,
 		resolved.Provider.Spec.Organization,
 		resolved.Repository.Spec.Name,
 	)
 	if err != nil {
 		if errors.Is(err, githubclient.ErrNotFound) {
-			return fmt.Errorf(
+			return nil, fmt.Errorf(
 				"GitHub repository %s/%s does not exist",
 				resolved.Provider.Spec.Organization,
 				resolved.Repository.Spec.Name,
 			)
 		}
 
-		return fmt.Errorf(
+		return nil, fmt.Errorf(
 			"get GitHub repository %s/%s: %w",
 			resolved.Provider.Spec.Organization,
 			resolved.Repository.Spec.Name,
@@ -120,5 +122,24 @@ func verifyRemoteRepository(
 		)
 	}
 
-	return nil
+	return repository, nil
+}
+
+func verifyRemoteRepository(
+	ctx context.Context,
+	resolved *resolvedRepositoryAccess,
+) error {
+	_, err := getRemoteRepository(ctx, resolved)
+	return err
+}
+
+func isArchivedRepositoryError(err error) bool {
+	var apiErr *githubclient.APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusForbidden {
+		return false
+	}
+
+	body := strings.ToLower(apiErr.Body)
+	return strings.Contains(body, "repository was archived") ||
+		strings.Contains(body, "repository is archived")
 }

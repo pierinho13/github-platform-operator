@@ -84,7 +84,8 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 	if err != nil {
 		return r.fail(ctx, &collaborator, nil, dependencyFailureReason(err), err)
 	}
-	if err := verifyRemoteRepository(ctx, resolved); err != nil {
+	remoteRepository, err := getRemoteRepository(ctx, resolved)
+	if err != nil {
 		return r.fail(ctx, &collaborator, resolved, "RepositoryUnavailable", err)
 	}
 
@@ -96,6 +97,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 	)
 	switch {
 	case errors.Is(err, githubclient.ErrNotFound):
+		if remoteRepository.Archived {
+			return r.pauseForArchivedRepository(ctx, &collaborator, resolved, nil)
+		}
 		currentAccess, err = resolved.Client.SetCollaboratorPermission(
 			ctx,
 			resolved.Provider.Spec.Organization,
@@ -104,6 +108,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 			string(collaborator.Spec.Permission),
 		)
 		if err != nil {
+			if isArchivedRepositoryError(err) {
+				return r.pauseForArchivedRepository(ctx, &collaborator, resolved, nil)
+			}
 			return r.fail(ctx, &collaborator, resolved, "ReconciliationFailed", fmt.Errorf(
 				"configure collaborator %q access to %s/%s: %w",
 				collaborator.Spec.Username,
@@ -113,6 +120,8 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 			))
 		}
 		return r.finishAccess(ctx, &collaborator, resolved, currentAccess, "AccessConfigured")
+	case isArchivedRepositoryError(err):
+		return r.pauseForArchivedRepository(ctx, &collaborator, resolved, nil)
 	case err != nil:
 		return r.fail(ctx, &collaborator, resolved, "ReconciliationFailed", fmt.Errorf(
 			"get collaborator %q access to %s/%s: %w",
@@ -122,6 +131,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 			err,
 		))
 	case currentAccess.Permission != string(collaborator.Spec.Permission) && currentAccess.InvitationPending:
+		if remoteRepository.Archived {
+			return r.pauseForArchivedRepository(ctx, &collaborator, resolved, currentAccess)
+		}
 		currentAccess, err = resolved.Client.UpdateRepositoryInvitation(
 			ctx,
 			resolved.Provider.Spec.Organization,
@@ -130,6 +142,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 			string(collaborator.Spec.Permission),
 		)
 		if err != nil {
+			if isArchivedRepositoryError(err) {
+				return r.pauseForArchivedRepository(ctx, &collaborator, resolved, currentAccess)
+			}
 			return r.fail(ctx, &collaborator, resolved, "ReconciliationFailed", fmt.Errorf(
 				"update invitation for collaborator %q on %s/%s: %w",
 				collaborator.Spec.Username,
@@ -140,6 +155,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 		}
 		return r.finishAccess(ctx, &collaborator, resolved, currentAccess, "InvitationUpdated")
 	case currentAccess.Permission != string(collaborator.Spec.Permission):
+		if remoteRepository.Archived {
+			return r.pauseForArchivedRepository(ctx, &collaborator, resolved, currentAccess)
+		}
 		currentAccess, err = resolved.Client.SetCollaboratorPermission(
 			ctx,
 			resolved.Provider.Spec.Organization,
@@ -148,6 +166,9 @@ func (r *GitHubRepositoryCollaboratorReconciler) Reconcile(
 			string(collaborator.Spec.Permission),
 		)
 		if err != nil {
+			if isArchivedRepositoryError(err) {
+				return r.pauseForArchivedRepository(ctx, &collaborator, resolved, currentAccess)
+			}
 			return r.fail(ctx, &collaborator, resolved, "ReconciliationFailed", fmt.Errorf(
 				"update collaborator %q access to %s/%s: %w",
 				collaborator.Spec.Username,
@@ -200,6 +221,40 @@ func (r *GitHubRepositoryCollaboratorReconciler) finishAccess(
 	); err != nil {
 		return ctrl.Result{}, err
 	}
+	return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+}
+
+func (r *GitHubRepositoryCollaboratorReconciler) pauseForArchivedRepository(
+	ctx context.Context,
+	collaborator *githubv1alpha1.GitHubRepositoryCollaborator,
+	resolved *resolvedRepositoryAccess,
+	access *githubclient.CollaboratorAccess,
+) (ctrl.Result, error) {
+	logger := logf.FromContext(ctx)
+	logger.Info(
+		"repository is archived; skipping collaborator reconciliation",
+		"organization", resolved.Provider.Spec.Organization,
+		"repository", resolved.Repository.Spec.Name,
+		"username", collaborator.Spec.Username,
+	)
+
+	message := fmt.Sprintf(
+		"GitHub repository %s/%s is archived and read-only; collaborator reconciliation is paused",
+		resolved.Provider.Spec.Organization,
+		resolved.Repository.Spec.Name,
+	)
+	if err := r.setReadyCondition(
+		ctx,
+		collaborator,
+		resolved,
+		access,
+		metav1.ConditionFalse,
+		"RepositoryArchived",
+		message,
+	); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
 }
 
@@ -257,6 +312,16 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 		invitationID = collaborator.Status.InvitationID
 	}
 
+	if resolved.Repository.Status.Archived {
+		logger.Info(
+			"repository is archived; deferring collaborator revocation",
+			"organization", resolved.Provider.Spec.Organization,
+			"repository", resolved.Repository.Spec.Name,
+			"username", collaborator.Spec.Username,
+		)
+		return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+	}
+
 	err = resolved.Client.RemoveCollaboratorAccess(
 		ctx,
 		resolved.Provider.Spec.Organization,
@@ -265,6 +330,15 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 		invitationID,
 	)
 	if err != nil && !errors.Is(err, githubclient.ErrNotFound) {
+		if isArchivedRepositoryError(err) {
+			logger.Info(
+				"repository became archived while revoking collaborator access; deferring revocation",
+				"organization", resolved.Provider.Spec.Organization,
+				"repository", resolved.Repository.Spec.Name,
+				"username", collaborator.Spec.Username,
+			)
+			return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+		}
 		if result, ok := githubDeferredResult(err); ok {
 			return result, nil
 		}
