@@ -38,9 +38,9 @@ metrics:
     bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
     tlsConfig:
       insecureSkipVerify: true
-    prometheusServiceAccount:
-      name: ""
-      namespace: ""
+  readerBinding:
+    enabled: false
+    subjects: []
 
 networkPolicy:
   enabled: false

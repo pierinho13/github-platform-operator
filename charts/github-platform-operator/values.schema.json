@@ -128,7 +128,7 @@
       "description": "Controller metrics endpoint configuration.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "secure", "port", "service", "serviceMonitor"],
+      "required": ["enabled", "secure", "port", "service", "serviceMonitor", "readerBinding"],
       "properties": {
         "enabled": {
           "description": "Expose the controller metrics endpoint.",
@@ -173,8 +173,7 @@
             "interval",
             "scrapeTimeout",
             "bearerTokenFile",
-            "tlsConfig",
-            "prometheusServiceAccount"
+            "tlsConfig"
           ],
           "properties": {
             "enabled": {
@@ -218,50 +217,60 @@
                   "type": "boolean"
                 }
               }
-            },
-            "prometheusServiceAccount": {
-              "description": "Prometheus ServiceAccount to bind to the metrics-reader ClusterRole. Leave both fields empty when RBAC is managed externally.",
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["name", "namespace"],
-              "properties": {
-                "name": {
-                  "description": "Prometheus ServiceAccount name.",
-                  "type": "string"
-                },
-                "namespace": {
-                  "description": "Prometheus ServiceAccount namespace.",
-                  "type": "string"
-                }
-              },
-              "allOf": [
-                {
-                  "if": {
-                    "properties": {
-                      "name": {"minLength": 1}
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "namespace": {"minLength": 1}
-                    }
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "namespace": {"minLength": 1}
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "name": {"minLength": 1}
-                    }
-                  }
-                }
-              ]
             }
           }
+        },
+        "readerBinding": {
+          "description": "Optional ClusterRoleBinding for ServiceAccounts that need access to the secured metrics endpoint.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "subjects"],
+          "properties": {
+            "enabled": {
+              "description": "Create a ClusterRoleBinding to the metrics-reader ClusterRole.",
+              "type": "boolean"
+            },
+            "subjects": {
+              "description": "ServiceAccounts granted GET /metrics when the reader binding is enabled.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "name", "namespace"],
+                "properties": {
+                  "kind": {
+                    "description": "RBAC subject kind.",
+                    "type": "string",
+                    "enum": ["ServiceAccount"]
+                  },
+                  "name": {
+                    "description": "ServiceAccount name.",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "namespace": {
+                    "description": "ServiceAccount namespace.",
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "enabled": {"const": true}
+                }
+              },
+              "then": {
+                "properties": {
+                  "subjects": {"minItems": 1}
+                }
+              }
+            }
+          ]
         }
       },
       "allOf": [
@@ -278,6 +287,23 @@
           "then": {
             "properties": {
               "enabled": {"const": true}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "readerBinding": {
+                "properties": {
+                  "enabled": {"const": true}
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "enabled": {"const": true},
+              "secure": {"const": true}
             }
           }
         }

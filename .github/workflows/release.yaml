@@ -246,6 +246,7 @@ jobs:
         shell: bash
         env:
           CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+          APP_VERSION: ${{ steps.version.outputs.tag }}
         run: |
           set -euo pipefail
 
@@ -257,6 +258,45 @@ jobs:
           test -f "${chart}"
           test -f "${provenance}"
           helm verify "${chart}" --keyring "${HELM_VERIFY_KEYRING}"
+
+          chart_metadata="$(helm show chart "${chart}")"
+          actual_chart_version="$(
+            printf '%s\n' "${chart_metadata}" |
+              sed -n 's/^version:[[:space:]]*//p' |
+              head -n 1 |
+              tr -d "\"'"
+          )"
+          actual_app_version="$(
+            printf '%s\n' "${chart_metadata}" |
+              sed -n 's/^appVersion:[[:space:]]*//p' |
+              head -n 1 |
+              tr -d "\"'"
+          )"
+
+          if [[ "${actual_chart_version}" != "${CHART_VERSION}" ]]; then
+            echo "Packaged chart version mismatch." >&2
+            echo "Expected: ${CHART_VERSION}" >&2
+            echo "Actual:   ${actual_chart_version}" >&2
+            exit 1
+          fi
+
+          if [[ "${actual_app_version}" != "${APP_VERSION}" ]]; then
+            echo "Packaged chart appVersion mismatch." >&2
+            echo "Expected: ${APP_VERSION}" >&2
+            echo "Actual:   ${actual_app_version}" >&2
+            exit 1
+          fi
+
+          if ! grep -q 'artifacthub.io/signKey:' <<< "${chart_metadata}"; then
+            echo "Packaged chart is missing artifacthub.io/signKey." >&2
+            exit 1
+          fi
+
+          echo "Packaged Helm metadata verified:"
+          echo "  version:    ${actual_chart_version}"
+          echo "  appVersion: ${actual_app_version}"
+          echo "  signKey:    present"
+
           tar -tzf "${chart}" > "${archive_listing}"
           cat "${archive_listing}"
 
@@ -401,6 +441,70 @@ jobs:
           else
             helm push "${chart}" "${HELM_REGISTRY}"
           fi
+
+      - name: Verify published Helm chart
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.chart_version }}
+          APP_VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          chart_ref="${HELM_REGISTRY}/github-platform-operator"
+          pull_dir="$(mktemp -d)"
+          trap 'rm -rf "${pull_dir}"' EXIT
+
+          chart_metadata="$(
+            helm show chart               "${chart_ref}"               --version "${CHART_VERSION}"
+          )"
+
+          actual_chart_version="$(
+            printf '%s\n' "${chart_metadata}" |
+              sed -n 's/^version:[[:space:]]*//p' |
+              head -n 1 |
+              tr -d "\"'"
+          )"
+          actual_app_version="$(
+            printf '%s\n' "${chart_metadata}" |
+              sed -n 's/^appVersion:[[:space:]]*//p' |
+              head -n 1 |
+              tr -d "\"'"
+          )"
+
+          if [[ "${actual_chart_version}" != "${CHART_VERSION}" ]]; then
+            echo "Published chart version mismatch." >&2
+            echo "Expected: ${CHART_VERSION}" >&2
+            echo "Actual:   ${actual_chart_version}" >&2
+            exit 1
+          fi
+
+          if [[ "${actual_app_version}" != "${APP_VERSION}" ]]; then
+            echo "Published chart appVersion mismatch." >&2
+            echo "Expected: ${APP_VERSION}" >&2
+            echo "Actual:   ${actual_app_version}" >&2
+            exit 1
+          fi
+
+          if ! grep -q 'artifacthub.io/signKey:' <<< "${chart_metadata}"; then
+            echo "Published chart is missing artifacthub.io/signKey." >&2
+            exit 1
+          fi
+
+          helm pull             "${chart_ref}"             --version "${CHART_VERSION}"             --destination "${pull_dir}"             --prov
+
+          pulled_chart="${pull_dir}/github-platform-operator-${CHART_VERSION}.tgz"
+          pulled_provenance="${pulled_chart}.prov"
+
+          test -f "${pulled_chart}"
+          test -f "${pulled_provenance}"
+          helm verify             "${pulled_chart}"             --keyring "${HELM_VERIFY_KEYRING}"
+
+          echo "Published Helm chart verified:"
+          echo "  version:    ${actual_chart_version}"
+          echo "  appVersion: ${actual_app_version}"
+          echo "  signKey:    present"
+          echo "  provenance: valid"
 
       - name: Create release tag
         if: steps.version.outputs.publish == 'true'

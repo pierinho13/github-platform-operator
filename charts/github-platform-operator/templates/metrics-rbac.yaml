@@ -49,12 +49,12 @@ rules:
       - get
 {{- end }}
 
-{{- if and .Values.rbac.create .Values.metrics.enabled .Values.metrics.secure .Values.metrics.serviceMonitor.enabled .Values.metrics.serviceMonitor.prometheusServiceAccount.name .Values.metrics.serviceMonitor.prometheusServiceAccount.namespace }}
+{{- if and .Values.rbac.create .Values.metrics.enabled .Values.metrics.secure .Values.metrics.readerBinding.enabled (gt (len .Values.metrics.readerBinding.subjects) 0) }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "github-platform-operator.fullname" . }}-prometheus-metrics
+  name: {{ include "github-platform-operator.fullname" . }}-metrics-reader-binding
   labels:
     {{- include "github-platform-operator.labels" . | nindent 4 }}
 roleRef:
@@ -62,7 +62,5 @@ roleRef:
   kind: ClusterRole
   name: {{ include "github-platform-operator.metricsReaderRoleName" . }}
 subjects:
-  - kind: ServiceAccount
-    name: {{ .Values.metrics.serviceMonitor.prometheusServiceAccount.name }}
-    namespace: {{ .Values.metrics.serviceMonitor.prometheusServiceAccount.namespace }}
+{{- toYaml .Values.metrics.readerBinding.subjects | nindent 2 }}
 {{- end }}
