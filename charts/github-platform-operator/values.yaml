@@ -28,6 +28,19 @@ metrics:
   service:
     type: ClusterIP
     annotations: {}
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    additionalLabels: {}
+    annotations: {}
+    interval: 30s
+    scrapeTimeout: 10s
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      insecureSkipVerify: true
+    prometheusServiceAccount:
+      name: ""
+      namespace: ""
 
 networkPolicy:
   enabled: false

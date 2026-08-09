@@ -1,0 +1,36 @@
+{{- if and .Values.metrics.enabled .Values.metrics.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "github-platform-operator.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.metrics.serviceMonitor.namespace }}
+  labels:
+    {{- include "github-platform-operator.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.metrics.serviceMonitor.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "github-platform-operator.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: {{ ternary "https" "http" .Values.metrics.secure }}
+      path: /metrics
+      scheme: {{ ternary "https" "http" .Values.metrics.secure }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.metrics.serviceMonitor.scrapeTimeout }}
+      {{- if .Values.metrics.secure }}
+      {{- with .Values.metrics.serviceMonitor.bearerTokenFile }}
+      bearerTokenFile: {{ . | quote }}
+      {{- end }}
+      tlsConfig:
+        insecureSkipVerify: {{ .Values.metrics.serviceMonitor.tlsConfig.insecureSkipVerify }}
+      {{- end }}
+{{- end }}
