@@ -159,6 +159,9 @@ metrics:
     enabled: false
     interval: 30s
     scrapeTimeout: 10s
+  readerBinding:
+    enabled: false
+    subjects: []
 
 networkPolicy:
   enabled: false
@@ -197,9 +200,12 @@ metrics:
       release: kube-prometheus-stack
     interval: 30s
     scrapeTimeout: 10s
-    prometheusServiceAccount:
-      name: kube-prometheus-stack-prometheus
-      namespace: monitoring
+  readerBinding:
+    enabled: true
+    subjects:
+      - kind: ServiceAccount
+        name: kube-prometheus-stack-prometheus
+        namespace: monitoring
 ```
 
 `serviceMonitor.namespace` defaults to the Helm release namespace. Use
@@ -207,11 +213,11 @@ metrics:
 label.
 
 For secure metrics, the ServiceMonitor uses the Prometheus Pod's projected
-ServiceAccount token by default. When `prometheusServiceAccount.name` and
-`prometheusServiceAccount.namespace` are both set and `rbac.create=true`, the
-chart creates a ClusterRoleBinding granting that ServiceAccount `GET /metrics`.
-Leave both fields empty when equivalent metrics-reader RBAC is managed
-externally.
+ServiceAccount token by default. ServiceMonitor discovery and metrics-reader
+RBAC are configured separately. When `metrics.readerBinding.enabled=true` and
+`rbac.create=true`, the chart creates a ClusterRoleBinding granting each
+configured ServiceAccount `GET /metrics`. Leave `readerBinding.enabled=false`
+when equivalent metrics-reader RBAC is managed externally.
 
 The default secure scrape skips certificate verification because
 controller-runtime serves the metrics endpoint with its runtime TLS
