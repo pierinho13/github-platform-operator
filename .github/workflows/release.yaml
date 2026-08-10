@@ -65,7 +65,7 @@ jobs:
           fi
 
       - name: Set up ORAS
-        uses: oras-project/setup-oras@v1
+        uses: oras-project/setup-oras@v2
 
       - name: Publish Artifact Hub repository metadata
         shell: bash
@@ -405,7 +405,7 @@ jobs:
 
       - name: Generate container provenance
         if: steps.version.outputs.publish == 'true'
-        uses: actions/attest@v4.2.1
+        uses: actions/attest@v4.2.2
         with:
           subject-name: ${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.image.outputs.digest }}
