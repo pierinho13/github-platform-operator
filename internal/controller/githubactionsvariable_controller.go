@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -44,10 +45,11 @@ const (
 // GitHubActionsVariableReconciler reconciles GitHubActionsVariable resources.
 type GitHubActionsVariableReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.ActionsClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.ActionsClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubactionsvariables,verbs=get;list;watch;create;update;patch;delete
@@ -157,7 +159,7 @@ func (r *GitHubActionsVariableReconciler) Reconcile(
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubActionsVariable status: %w", err)
 	}
-	return ctrl.Result{RequeueAfter: actionsRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func variableNeedsUpdate(

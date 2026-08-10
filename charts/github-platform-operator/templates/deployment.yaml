@@ -42,6 +42,7 @@ spec:
             {{- if .Values.leaderElection.enabled }}
             - --leader-elect
             {{- end }}
+            - {{ printf "--drift-detection-interval=%s" .Values.reconciliation.driftDetectionInterval | quote }}
             {{- if .Values.metrics.enabled }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             {{- if not .Values.metrics.secure }}

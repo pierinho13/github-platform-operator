@@ -43,16 +43,16 @@ import (
 const (
 	githubRepositoryRulesetFinalizer = "github.k8sready.com/repository-ruleset-finalizer"
 	repositoryRulesetSourceType      = "Repository"
-	rulesetRequeueInterval           = 5 * time.Minute
 )
 
 // GitHubRepositoryRulesetReconciler reconciles repository rulesets.
 type GitHubRepositoryRulesetReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.RepositoryRulesetClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.RepositoryRulesetClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositoryrulesets,verbs=get;list;watch;create;update;patch;delete
@@ -154,7 +154,7 @@ func (r *GitHubRepositoryRulesetReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("update GitHubRepositoryRuleset status: %w", err)
 	}
 
-	return ctrl.Result{RequeueAfter: rulesetRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 type resolvedRepositoryRuleset struct {

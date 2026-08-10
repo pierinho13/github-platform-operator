@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -39,10 +40,11 @@ const githubOrganizationMemberFinalizer = "github.k8sready.com/organization-memb
 // GitHubOrganizationMemberReconciler reconciles direct organization membership.
 type GitHubOrganizationMemberReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.OrganizationClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.OrganizationClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githuborganizationmembers,verbs=get;list;watch;create;update;patch;delete
@@ -145,7 +147,7 @@ func (r *GitHubOrganizationMemberReconciler) finish(
 	if err := r.setReadyCondition(ctx, resource, resolved, membership, status, reason, message); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubOrganizationMember status: %w", err)
 	}
-	return ctrl.Result{RequeueAfter: organizationRequeueAfter}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubOrganizationMemberReconciler) reconcileDelete(

@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -46,10 +47,11 @@ type resolvedTeamMembership struct {
 // GitHubTeamMembershipReconciler reconciles membership in managed teams.
 type GitHubTeamMembershipReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.OrganizationClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.OrganizationClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubteammemberships,verbs=get;list;watch;create;update;patch;delete
@@ -215,7 +217,7 @@ func (r *GitHubTeamMembershipReconciler) finish(
 	if err := r.setReadyCondition(ctx, resource, resolved, membership, status, reason, message); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubTeamMembership status: %w", err)
 	}
-	return ctrl.Result{RequeueAfter: organizationRequeueAfter}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubTeamMembershipReconciler) reconcileDelete(

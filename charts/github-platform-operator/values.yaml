@@ -21,6 +21,9 @@ rbac:
 leaderElection:
   enabled: true
 
+reconciliation:
+  driftDetectionInterval: 5m
+
 metrics:
   enabled: true
   secure: true

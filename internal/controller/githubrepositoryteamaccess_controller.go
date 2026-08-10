@@ -37,16 +37,16 @@ import (
 
 const (
 	githubRepositoryTeamAccessFinalizer = "github.k8sready.com/team-access-finalizer"
-	repositoryAccessRequeueInterval     = 5 * time.Minute
 )
 
 // GitHubRepositoryTeamAccessReconciler reconciles GitHubRepositoryTeamAccess resources.
 type GitHubRepositoryTeamAccessReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.RepositoryAccessClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.RepositoryAccessClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositoryteamaccesses,verbs=get;list;watch;create;update;patch;delete
@@ -243,7 +243,7 @@ func (r *GitHubRepositoryTeamAccessReconciler) succeed(
 	); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubRepositoryTeamAccessReconciler) fail(

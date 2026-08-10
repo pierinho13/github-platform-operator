@@ -45,10 +45,11 @@ const (
 // GitHubActionsSecretReconciler reconciles GitHubActionsSecret resources.
 type GitHubActionsSecretReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.ActionsClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.ActionsClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubactionssecrets,verbs=get;list;watch;create;update;patch;delete
@@ -167,7 +168,7 @@ func (r *GitHubActionsSecretReconciler) Reconcile(
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubActionsSecret status: %w", err)
 	}
-	return ctrl.Result{RequeueAfter: actionsRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubActionsSecretReconciler) secretNeedsSynchronization(

@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -64,6 +65,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var driftDetectionInterval time.Duration
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -82,6 +84,13 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.DurationVar(
+		&driftDetectionInterval,
+		"drift-detection-interval",
+		controller.DefaultDriftDetectionInterval,
+		"How often controllers poll GitHub to detect external configuration drift. "+
+			"Watched Kubernetes events still trigger reconciliation immediately.",
+	)
 	opts := zap.Options{
 		Development: true,
 	}
@@ -89,6 +98,13 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	if err := controller.ValidateDriftDetectionInterval(driftDetectionInterval); err != nil {
+		setupLog.Error(err, "invalid drift detection interval")
+		os.Exit(1)
+	}
+
+	setupLog.Info("configured GitHub drift detection", "interval", driftDetectionInterval)
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -219,110 +235,120 @@ func main() {
 	}
 
 	if err := (&controller.GitHubOrganizationMemberReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubOrganizationMember")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubTeamReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubTeam")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubTeamMembershipReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubTeamMembership")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubRepositoryReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepository")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubRepositoryRulesetReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryRuleset")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubRepositoryTeamAccessReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryTeamAccess")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubRepositoryCollaboratorReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubRepositoryCollaborator")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubEnvironmentReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubEnvironment")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubActionsSecretReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsSecret")
 		os.Exit(1)
 	}
 
 	if err := (&controller.GitHubActionsVariableReconciler{
-		Client:              mgr.GetClient(),
-		APIReader:           mgr.GetAPIReader(),
-		Scheme:              mgr.GetScheme(),
-		GitHubClientFactory: githubClientFactory,
-		GitHubTokenProvider: githubTokenProvider,
+		Client:                 mgr.GetClient(),
+		APIReader:              mgr.GetAPIReader(),
+		Scheme:                 mgr.GetScheme(),
+		GitHubClientFactory:    githubClientFactory,
+		GitHubTokenProvider:    githubTokenProvider,
+		DriftDetectionInterval: driftDetectionInterval,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "GitHubActionsVariable")
 		os.Exit(1)

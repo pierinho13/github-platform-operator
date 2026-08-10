@@ -729,7 +729,7 @@ var _ = Describe("GitHubRepository Controller", func() {
 
 			result, err := controllerReconciler.Reconcile(ctx, request)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(requeueInterval))
+			Expect(result.RequeueAfter).To(Equal(DefaultDriftDetectionInterval))
 			Expect(fakeFactory.calls).To(Equal(0))
 			Expect(fakeGitHubClient.createCalls).To(Equal(0))
 

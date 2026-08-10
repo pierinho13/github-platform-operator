@@ -35,18 +35,16 @@ import (
 	githubclient "github.com/pierinho13/github-platform-operator/internal/github"
 )
 
-const (
-	githubTeamFinalizer      = "github.k8sready.com/team-finalizer"
-	organizationRequeueAfter = 5 * time.Minute
-)
+const githubTeamFinalizer = "github.k8sready.com/team-finalizer"
 
 // GitHubTeamReconciler reconciles organization teams.
 type GitHubTeamReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.OrganizationClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.OrganizationClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubteams,verbs=get;list;watch;create;update;patch;delete
@@ -164,7 +162,7 @@ func (r *GitHubTeamReconciler) Reconcile(
 	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("update GitHubTeam status: %w", err)
 	}
-	return ctrl.Result{RequeueAfter: organizationRequeueAfter}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func desiredTeamUpdate(
@@ -212,7 +210,7 @@ func (r *GitHubTeamReconciler) reconcileDelete(
 		); err != nil {
 			return ctrl.Result{}, fmt.Errorf("update GitHubTeam deletion status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: organizationRequeueAfter}, nil
+		return driftDetectionResult(r.DriftDetectionInterval), nil
 	}
 
 	resolved, err := resolveOrganization(
