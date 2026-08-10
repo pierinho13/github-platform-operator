@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -39,10 +40,11 @@ const githubRepositoryCollaboratorFinalizer = "github.k8sready.com/collaborator-
 // GitHubRepositoryCollaboratorReconciler reconciles direct user repository access.
 type GitHubRepositoryCollaboratorReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.RepositoryAccessClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.RepositoryAccessClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositorycollaborators,verbs=get;list;watch;create;update;patch;delete
@@ -221,7 +223,7 @@ func (r *GitHubRepositoryCollaboratorReconciler) finishAccess(
 	); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubRepositoryCollaboratorReconciler) pauseForArchivedRepository(
@@ -255,7 +257,7 @@ func (r *GitHubRepositoryCollaboratorReconciler) pauseForArchivedRepository(
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
@@ -319,7 +321,7 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 			"repository", resolved.Repository.Spec.Name,
 			"username", collaborator.Spec.Username,
 		)
-		return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+		return driftDetectionResult(r.DriftDetectionInterval), nil
 	}
 
 	err = resolved.Client.RemoveCollaboratorAccess(
@@ -337,7 +339,7 @@ func (r *GitHubRepositoryCollaboratorReconciler) reconcileDelete(
 				"repository", resolved.Repository.Spec.Name,
 				"username", collaborator.Spec.Username,
 			)
-			return ctrl.Result{RequeueAfter: repositoryAccessRequeueInterval}, nil
+			return driftDetectionResult(r.DriftDetectionInterval), nil
 		}
 		if result, ok := githubDeferredResult(err); ok {
 			return result, nil

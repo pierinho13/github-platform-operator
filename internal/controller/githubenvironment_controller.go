@@ -37,16 +37,16 @@ import (
 
 const (
 	githubEnvironmentFinalizer = "github.k8sready.com/environment-finalizer"
-	actionsRequeueInterval     = 5 * time.Minute
 )
 
 // GitHubEnvironmentReconciler reconciles GitHubEnvironment resources.
 type GitHubEnvironmentReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.ActionsClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.ActionsClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubenvironments,verbs=get;list;watch;create;update;patch;delete
@@ -134,7 +134,7 @@ func (r *GitHubEnvironmentReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("update GitHubEnvironment status: %w", err)
 	}
 
-	return ctrl.Result{RequeueAfter: actionsRequeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubEnvironmentReconciler) reconcileDelete(
@@ -167,7 +167,7 @@ func (r *GitHubEnvironmentReconciler) reconcileDelete(
 		); err != nil {
 			return ctrl.Result{}, fmt.Errorf("update GitHubEnvironment deletion status: %w", err)
 		}
-		return ctrl.Result{RequeueAfter: actionsRequeueInterval}, nil
+		return driftDetectionResult(r.DriftDetectionInterval), nil
 	}
 
 	resolved, err := resolveRepositoryActionsTarget(

@@ -110,7 +110,7 @@ var _ = Describe("GitHubRepositoryCollaborator archived repository handling", fu
 		By("observing the archived repository without attempting a write")
 		result, err := reconciler.Reconcile(ctx, request)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(repositoryAccessRequeueInterval))
+		Expect(result.RequeueAfter).To(Equal(DefaultDriftDetectionInterval))
 		Expect(fakeClient.setCollaboratorCalls).To(Equal(0))
 		Expect(fakeClient.updateInvitationCalls).To(Equal(0))
 

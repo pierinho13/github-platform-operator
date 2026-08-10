@@ -11,6 +11,7 @@
     "serviceAccount",
     "rbac",
     "leaderElection",
+    "reconciliation",
     "metrics",
     "networkPolicy",
     "resources"
@@ -121,6 +122,21 @@
         "enabled": {
           "description": "Enable controller-runtime leader election.",
           "type": "boolean"
+        }
+      }
+    },
+    "reconciliation": {
+      "description": "Periodic reconciliation configuration for detecting drift in GitHub.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "driftDetectionInterval"
+      ],
+      "properties": {
+        "driftDetectionInterval": {
+          "description": "How often controllers poll GitHub for external drift. Watched Kubernetes events still reconcile immediately. The manager accepts Go duration syntax and enforces a range of 1m to 24h.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },

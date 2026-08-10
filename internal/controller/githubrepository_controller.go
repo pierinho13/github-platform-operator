@@ -38,18 +38,16 @@ import (
 	githubclient "github.com/pierinho13/github-platform-operator/internal/github"
 )
 
-const (
-	githubRepositoryFinalizer = "github.k8sready.com/repository-finalizer"
-	requeueInterval           = 5 * time.Minute
-)
+const githubRepositoryFinalizer = "github.k8sready.com/repository-finalizer"
 
 // GitHubRepositoryReconciler reconciles a GitHubRepository object.
 type GitHubRepositoryReconciler struct {
 	client.Client
-	APIReader           client.Reader
-	Scheme              *runtime.Scheme
-	GitHubClientFactory githubclient.RepositoryClientFactory
-	GitHubTokenProvider githubclient.TokenProvider
+	APIReader              client.Reader
+	Scheme                 *runtime.Scheme
+	GitHubClientFactory    githubclient.RepositoryClientFactory
+	GitHubTokenProvider    githubclient.TokenProvider
+	DriftDetectionInterval time.Duration
 }
 
 // +kubebuilder:rbac:groups=github.k8sready.com,resources=githubrepositories,verbs=get;list;watch;create;update;patch;delete
@@ -161,7 +159,7 @@ func (r *GitHubRepositoryReconciler) Reconcile(
 		return ctrl.Result{}, fmt.Errorf("update GitHubRepository status: %w", err)
 	}
 
-	return ctrl.Result{RequeueAfter: requeueInterval}, nil
+	return driftDetectionResult(r.DriftDetectionInterval), nil
 }
 
 func (r *GitHubRepositoryReconciler) resolveProvider(
